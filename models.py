@@ -3,7 +3,7 @@
 import warnings
 import tensorflow as tf
 from tensorflow.keras.applications import VGG16
-from vgg16_new import VGG16
+from base_models.vgg16_new import VGG16
 from tensorflow.keras import Model, Sequential
 from tensorflow.keras.layers import InputLayer, MaxPool2D, Conv2D, Layer, Input
 from tensorflow.keras.models import clone_model
