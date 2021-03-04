@@ -5,9 +5,12 @@ from skimage import io
 import numpy as np
 from collections import namedtuple
 from cv2 import resize
+import matplotlib.pyplot as plt
 
 from itertools import product
 import math
+
+from tensorflow.image import draw_bounding_boxes
 
 
 TRAIN_ANN_PATH = './annotations/instances_train2017.json'
@@ -91,7 +94,8 @@ class Dataloader:
 
     def preprocess(self, images, ids):
         """
-        Apply augmentation
+        Apply augmentation to image and bounding boxes and
+        convert to convenient structures
 
         Parameters
         ----------
@@ -121,6 +125,15 @@ class Dataloader:
                 else:
                     bboxes.append(c.bbox)
                     class_labels.append(c.object)
+
+            print(np.array(bboxes[0]))
+            plt.imshow(images[0])
+            plt.show()
+            colors = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+            images = draw_bounding_boxes(tf.constant(images[0]), np.array(bboxes[0]), colors)
+            plt.imshow(images[0])
+            plt.show()
+
             transformed = self.augmentation.transform(
                 image=images[i],
                 bboxes=bboxes,
@@ -156,10 +169,10 @@ class Dataloader:
                 val_urls = self.val_urls[index : (index + self.batch_size)]
                 val_ids = self.val_ids[index : (index + self.batch_size)]
                 print("Reading data from urls...")
-                train_imgs = [io.imread(url)/255. for url in train_urls]
+                #train_imgs = [io.imread(url)/255. for url in train_urls]
                 val_imgs = [io.imread(url)/255. for url in val_urls]
                 print("Preprocessing images...")
-                train_batch = self.preprocess(images=train_imgs, ids=train_ids)
+                #train_batch = self.preprocess(images=train_imgs, ids=train_ids)
                 val_batch = self.preprocess(images=val_imgs, ids=val_ids)
                 print("Done!")
-            yield train_batch, val_batch
+            yield train_batch, train_ids, val_batch, val_ids
