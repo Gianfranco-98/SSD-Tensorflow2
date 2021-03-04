@@ -127,7 +127,7 @@ def encode_box(gt_box, def_box, positive=True, variances=[0.1, 0.1, 0.2, 0.2]):
     height = (np.log(gt_box.bbox.height / def_box.height)) / np.sqrt(variances[3])
     label = gt_box.label if positive else 0
     encoded_box = Labeled_Box(
-        bbox=Bounding_Box(x, y, width, height)
+        bbox=Bounding_Box(x, y, width, height),
         label=label
     )
     return encoded_box
@@ -268,11 +268,13 @@ def global_info(coco):
 
 def center_coco_bbox(bbox):
     """
-    Convert a coco ground truth bbox in order to have it in the format: 
-        Bounding_Box(x, y, width, height), with x=x_center and y=y_center
+    Convert a coco ground truth bbox in the format:
+        Bounding_Box(x_min, y_min, width, heigth)
+    In order to have it in the format: 
+        Bounding_Box(x_center, y_center, width, height)
     """
     x_center = bbox.x + bbox.width/2
     y_center = bbox.y + bbox.height/2
-    return Bounding_Box(x_center, y_center, width, height)
+    return Bounding_Box(x_center, y_center, bbox.width, bbox.height)
 
     
