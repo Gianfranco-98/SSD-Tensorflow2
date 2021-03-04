@@ -247,8 +247,8 @@ def lists_from_content(image_content):
                 classes_list.append(elem.object)
                 bboxes_list.append(box)
         else:
-            classes.append(elem.bbox)
-            classes.append(elem.object)
+            bboxes_list.append(elem.bbox)
+            classes_list.append(elem.object)
     return bboxes_list, classes_list
 
 # ____________________________________ COCO tools ____________________________________ #
