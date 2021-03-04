@@ -169,10 +169,10 @@ class Dataloader:
                 val_urls = self.val_urls[index : (index + self.batch_size)]
                 val_ids = self.val_ids[index : (index + self.batch_size)]
                 print("Reading data from urls...")
-                #train_imgs = [io.imread(url)/255. for url in train_urls]
+                train_imgs = [io.imread(url)/255. for url in train_urls]
                 val_imgs = [io.imread(url)/255. for url in val_urls]
                 print("Preprocessing images...")
-                #train_batch = self.preprocess(images=train_imgs, ids=train_ids)
+                train_batch = self.preprocess(images=train_imgs, ids=train_ids)
                 val_batch = self.preprocess(images=val_imgs, ids=val_ids)
                 print("Done!")
             yield train_batch, train_ids, val_batch, val_ids
