@@ -2,6 +2,7 @@
 
 from pycocotools.coco import COCO
 from collections import namedtuple
+import cv2
 
 import numpy as np
 
@@ -198,7 +199,7 @@ def get_union(bbox1, bbox2, intersection=None):
     return (area1 + area2 - intersection)
 
 
-def add_bboxes(image, bboxes, classes=None, scores=None):
+def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="coco"):
     """
     Add bounding boxes to an image
 
@@ -213,15 +214,16 @@ def add_bboxes(image, bboxes, classes=None, scores=None):
     ------
     image: the same image as before, but with the boxes inside
     """
-    num_boxes = len(boxes)
+    num_boxes = len(bboxes)
     for i in range(num_boxes):
-        #class_and_score = str(find_class_name(classes[i])) + ": " + str(scores[i].numpy())
-        #classes
-        #scores
-        cv2.rectangle(img=image, pt1=(boxes[i][0], boxes[i][1]), pt2=(boxes[i][2], boxes[i][3]), 
+        if bboxes_format == "coco":
+            bboxes[i] = (int(bboxes[i][0]), int(bboxes[i][1]), 
+                         int(bboxes[i][0]+bboxes[i][2]), int(bboxes[i][1]+bboxes[i][3]))
+            print(bboxes[i])
+        cv2.rectangle(img=image, pt1=(bboxes[i][0], bboxes[i][1]), pt2=(bboxes[i][2], bboxes[i][3]), 
                       color=(255, 0, 0), thickness=1)
-        cv2.putText(img=image, text=classes[i], org=(boxes[i][0], boxes[i][1] - 10), 
-                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=1.5, 
+        cv2.putText(img=image, text=classes[i], org=(bboxes[i][0], bboxes[i][1] - 10), 
+                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5, 
                     color=(0, 255, 255), thickness=2)
     return image
 
