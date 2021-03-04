@@ -51,7 +51,15 @@ class Feature_Map(object):
 
 class Dataloader:
 
-    def __init__(self, dataset, batch_size=32, image_dim=(300,300), image_source="url"):  
+    def __init__(
+        self, 
+        dataset, 
+        batch_size=32, 
+        image_dim=(300,300), 
+        image_source="url", 
+        train_obj=None, 
+        val_obj=None
+    ):  
         self.batch_size = batch_size
         self.image_dim = image_dim
         self.image_source = image_source
@@ -59,8 +67,12 @@ class Dataloader:
 
         if dataset == "COCO":
             self.dataset_name = "COCO"
-            self.train_coco = COCO(TRAIN_ANN_PATH)
-            self.val_coco = COCO(VAL_ANN_PATH)
+            if train_obj is not None and val_obj is not None:
+                self.train_coco = train_obj
+                self.val_coco = val_obj
+            else:
+                self.train_coco = COCO(TRAIN_ANN_PATH)
+                self.val_coco = COCO(VAL_ANN_PATH)
             self.train_ids, self.train_urls, self.labels = global_info(self.train_coco)
             self.val_ids, self.val_urls, self.labels = global_info(self.val_coco)
             self.labels_dict = {i:value for i, value in zip(self.val_coco.getCatIds(), self.labels)}
@@ -75,7 +87,7 @@ class Dataloader:
         print("Eval set = %i images [%s]" % (len(self.val_ids), self.image_source))
         print("%d Labels:\n%s" % (len(self.labels_dict), self.labels_dict))
         print("________________________________________________________________\n") 
-        pause = input("\n\nPress Enter to continue")  
+        #pause = input("\n\nPress Enter to continue")  
 
     def preprocess(self, images, ids):
         """
@@ -118,7 +130,7 @@ class Dataloader:
             bboxes_transformed = transformed['bboxes']
             labeled_boxes = []
             for box, label in zip(bboxes_transformed, class_labels): 
-                labeled_boxes.append(Labeled_Box(bbox=list(box), label=label, positive=1))
+                labeled_boxes.append(Labeled_Box(bbox=Bounding_Box(*box), label=label))
             batch.append({
                 'image': img_transformed,
                 'labels': labeled_boxes
