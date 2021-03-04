@@ -24,7 +24,7 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     l_conf: error in object classification
     """
     # Process ground truth
-    gt_classes = tf.constant([gtbox.label for gtbox in ground_truth])
+    gt_classes = tf.constant([gtbox.label for gtbox in ground_truth])               #TODO: manage batch
     gt_bboxes = tf.constant([list(gtbox.bbox) for gtbox in ground_truth])
 
     # Process predicted data
@@ -47,7 +47,7 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
         from_logits=True, reduction='sum'                       
     )
     l_conf = confidence_loss(
-        gt_classes[tf.math.logical_or(positive_mask, negative_mask)]
+        gt_classes[tf.math.logical_or(positive_mask, negative_mask)],
         pred_classes[tf.math.logical_or(positive_mask, negative_mask)]
     )
 
