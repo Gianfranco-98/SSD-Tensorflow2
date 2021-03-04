@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 from models import BaseNet, ExtraNet, DetectorNet
+import numpy as np
 
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Input, InputLayer
+from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Input
+from image_detection import Feature_Map
 
 
 BASE_NAME = "VGG16"
@@ -15,17 +17,31 @@ ASPECT_RATIOS = [[1., 2., 1/2],
                  [1., 2., 3., 1/2, 1/3],
                  [1., 2., 1/2],
                  [1., 2., 1/2]]
+SCALES = [0.1, 0.2, 0.375, 0.55, 0.725, 0.9, 1.075]
+SCALE_MIN = 0.2
+SCALE_MAX = 0.9
+PREDICT_4_3_SCALE = 0.1
 INPUT_SHAPE = (300, 300, 3)
 
 
 class SSD(Model):
 
-    def __init__(self, num_classes, input_shape):
+    def __init__(
+        self, 
+        num_classes, 
+        input_shape, 
+        default_boxes_num = DEFAULT_BOXES_NUM, 
+        aspect_ratios = ASPECT_RATIOS, 
+        scale_min = SCALE_MIN, 
+        scale_max = SCALE_MAX
+    ):
         super(SSD, self).__init__()
         self.base_architecture = BASE_NAME
         self.num_classes = num_classes
         self.default_boxes_num = DEFAULT_BOXES_NUM
-        #self.aspect_ratios = ASPECT_RATIOS
+        self.aspect_ratios = ASPECT_RATIOS
+        self.s_min = scale_min
+        self.s_max = scale_max
         self.filters_num = \
             [(self.num_classes + 4)*def_num for def_num in self.default_boxes_num]
         
@@ -33,7 +49,7 @@ class SSD(Model):
         # ---------------------------------------| SSD Structure |-------------------------------------- # 
         # ---------------------------------------------------------------------------------------------- #
         self.base = BaseNet(
-            architecture=self.base_architecture,            #TODO: fine-tuning and train with 38x38 shape at block3_pool
+            architecture=self.base_architecture,            #TODO: fine-tuning
             input_shape=input_shape,
             name="SSD_Base"
         )
@@ -74,7 +90,11 @@ class SSD(Model):
             ],
             name="SSD_Detector"
         )
+
+        #TODO: non-maximum suppression
+
         # ---------------------------------------------------------------------------------------------- #
+    
 
     @property
     def layers(self):
@@ -111,64 +131,3 @@ class SSD(Model):
             out4_3, out7, out8_2, out9_2, out10_2, out11_2])
         
         return feature_maps
-
-
-# TEST MAIN
-if __name__ == "__main__":
-
-    ssd = SSD(num_classes=80, input_shape=INPUT_SHAPE)
-
-    # SUMMARY #
-    ssd.base.summary()
-    ssd.extra_layers.summary()
-    ssd.detector.summary()
-
-    # TEST BASE #
-    """
-    input_ = [
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE)
-    ]
-    input_ = tf.stack(input_, axis=0)
-    print(ssd.base(tf.expand_dims(input_[0], axis=0)))
-    """
-
-    # TEST EXTRA #
-    """
-    input_ = [
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]),
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]),
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]),
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]),
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]),
-        tf.ones(shape=ssd.base["head_conv7"].output_shape[1:])
-    ]
-    input_ = tf.stack(input_, axis=0)
-    print(ssd.extra_layers(tf.expand_dims(input_[0], axis=0)))
-    """
-
-    # TEST DETECTOR #
-    """
-    input_ = [
-        tf.expand_dims(tf.ones(shape=ssd.base["block4_conv3"].output_shape[1:]), axis=0),
-        tf.expand_dims(tf.ones(shape=ssd.base["head_conv7"].output_shape[1:]), axis=0),
-        tf.expand_dims(tf.ones(shape=ssd.extra_layers["conv8_2"].output_shape[1:]), axis=0),
-        tf.expand_dims(tf.ones(shape=ssd.extra_layers["conv9_2"].output_shape[1:]), axis=0),
-        tf.expand_dims(tf.ones(shape=ssd.extra_layers["conv10_2"].output_shape[1:]), axis=0),
-        tf.expand_dims(tf.ones(shape=ssd.extra_layers["conv11_2"].output_shape[1:]), axis=0)
-    ]
-    """
-
-    # TEST SSD #
-    input_ = [
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-        tf.ones(shape=INPUT_SHAPE),
-    ]
-    input_ = tf.stack(input_, axis=0)
-    feature_maps = ssd(input_)
-    print(feature_maps)
