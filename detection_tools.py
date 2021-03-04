@@ -41,7 +41,7 @@ Structure of a bounding box with class index
 
 Fields
 ------
-    bbox: bounding box
+    bbox: Bounding_Box structure
     label: class index in the dataset
 """
 Labeled_Box = namedtuple("Labeled_Box", field_names = \
@@ -197,6 +197,60 @@ def get_union(bbox1, bbox2, intersection=None):
         intersection = get_intersection(bbox1, bbox2)
     return (area1 + area2 - intersection)
 
+
+def add_bboxes(image, bboxes, classes=None, scores=None):
+    """
+    Add bounding boxes to an image
+
+    Parameters
+    ----------
+    image: image to modify
+    bboxes: list of bounding boxes to draw on the image
+    classes: labels within bounding boxes (no classes printed if None)
+    scores: values of accuracy for each bounding box (no scores printed if None)
+
+    Return
+    ------
+    image: the same image as before, but with the boxes inside
+    """
+    num_boxes = len(boxes)
+    for i in range(num_boxes):
+        #class_and_score = str(find_class_name(classes[i])) + ": " + str(scores[i].numpy())
+        #classes
+        #scores
+        cv2.rectangle(img=image, pt1=(boxes[i][0], boxes[i][1]), pt2=(boxes[i][2], boxes[i][3]), 
+                      color=(255, 0, 0), thickness=1)
+        cv2.putText(img=image, text=classes[i], org=(boxes[i][0], boxes[i][1] - 10), 
+                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=1.5, 
+                    color=(0, 255, 255), thickness=2)
+    return image
+
+
+def lists_from_content(image_content):
+    """
+    Given a list of Image_Element structures (content of an image), 
+    return two lists with all bboxes and their relative classes
+
+    Parameters
+    ----------
+    image_content: list of Image_Element structures
+
+    Returns
+    -------
+    bboxes_list: list of all bboxes of the image
+    classes_list: list of all the classes for each bbox of the image
+    """
+    bboxes_list, classes_list = [], []
+    for elem in image_content:
+        if isinstance(elem.bbox[0], list):
+            for box in elem.bbox:
+                classes_list.append(elem.object)
+                bboxes_list.append(box)
+        else:
+            classes.append(elem.bbox)
+            classes.append(elem.object)
+    return bboxes_list, classes_list
+
 # ____________________________________ COCO tools ____________________________________ #
 
 
@@ -276,5 +330,3 @@ def center_coco_bbox(bbox):
     x_center = bbox.x + bbox.width/2
     y_center = bbox.y + bbox.height/2
     return Bounding_Box(x_center, y_center, bbox.width, bbox.height)
-
-    
