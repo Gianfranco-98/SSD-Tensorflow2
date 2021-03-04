@@ -2,13 +2,9 @@
 
 import warnings
 import tensorflow as tf
-from tensorflow.keras.applications import VGG16
 from base_models.vgg16_new import VGG16
 from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import InputLayer, MaxPool2D, Conv2D, Layer, Input
-from tensorflow.keras.models import clone_model
-from tensorflow.python.framework import tensor_util
-from tensorflow.python.ops.numpy_ops import np_arrays
+from tensorflow.keras.layers import MaxPool2D, Conv2D, Layer, Input
 
 
 BASE_WEIGHTS = 'imagenet'
@@ -155,10 +151,7 @@ class BaseNet(Powered_Sequential):
             arch = VGG16(include_top=False, weights='imagenet', input_shape=input_shape)
             layers = arch.layers[0:-1]
 
-            # 2. Modify layer "block3_pool in order to respect original paper"
-            #TODO
-
-            # 3. Add new head
+            # 2. Add new head
             layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[-1].name))
             layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6"))
             layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7"))
@@ -166,7 +159,6 @@ class BaseNet(Powered_Sequential):
                 layers=layers,
                 name=name
             )
-            self.summary()
 
         else:
             raise TypeError("Wrong name for the base architecture")
@@ -211,14 +203,3 @@ class DetectorNet(Powered_Model):
                 last_layer=out_layer
             ))
         return outputs
-
-
-"""
-# TEST MAIN #
-if __name__ == "__main__":
-
-    base = BaseNet("VGG16")
-    input1 = tf.expand_dims(tf.ones(shape=INPUT_SHAPE), 0)
-    base.summary()
-    print(base(input1, last_layer="head_conv7"))
-"""
