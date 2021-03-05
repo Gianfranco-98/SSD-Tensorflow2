@@ -6,21 +6,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
 from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Input
-from image_detection import Feature_Map
 
 
 BASE_NAME = "VGG16"
 DEFAULT_BOXES_NUM = [4, 6, 6, 6, 4, 4]
-ASPECT_RATIOS = [[1., 2., 1/2],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 1/2],
-                 [1., 2., 1/2]]
-SCALES = [0.1, 0.2, 0.375, 0.55, 0.725, 0.9, 1.075]
-SCALE_MIN = 0.2
-SCALE_MAX = 0.9
-PREDICT_4_3_SCALE = 0.1
 INPUT_SHAPE = (300, 300, 3)
 
 
@@ -31,17 +20,11 @@ class SSD(Model):
         num_classes, 
         input_shape, 
         default_boxes_num = DEFAULT_BOXES_NUM, 
-        aspect_ratios = ASPECT_RATIOS, 
-        scale_min = SCALE_MIN, 
-        scale_max = SCALE_MAX
     ):
         super(SSD, self).__init__()
         self.base_architecture = BASE_NAME
         self.num_classes = num_classes
         self.default_boxes_num = DEFAULT_BOXES_NUM
-        self.aspect_ratios = ASPECT_RATIOS
-        self.s_min = scale_min
-        self.s_max = scale_max
         self.filters_num = \
             [(self.num_classes + 4)*def_num for def_num in self.default_boxes_num]
         
@@ -104,13 +87,18 @@ class SSD(Model):
             self.detector.layers
         )
 
+    def summary(self):
+        self.base.summary()
+        self.extra_layers.summary()
+        self.detector.summary()
+
     def process_feature_maps(self, feature_maps):
         batch_size = feature_maps[0].shape[0]
         feature_maps_reshaped = []
         for feature in feature_maps:
             feature_maps_reshaped.append(
                 tf.reshape(feature, shape=(batch_size, -1, self.num_classes+4)))
-        prediction = tf.concat(feature_maps_reshaped, axis=1, name="SSD_prediction")          #TODO: check shapes
+        prediction = tf.concat(feature_maps_reshaped, axis=1, name="SSD_prediction") 
         return prediction
 
     def call(self, inputs, training=False):
