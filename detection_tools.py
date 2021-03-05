@@ -152,7 +152,7 @@ def jaccard_overlap(bbox1, bbox2):
     return intersection / union
 
 
-def get_intersection(bbox1, bbox2):
+def get_intersection(bbox1, bbox2, origin='top_left'):
     """
     Calculate area of the intersection of the 2 given bounding boxes
 
@@ -160,21 +160,25 @@ def get_intersection(bbox1, bbox2):
     ----------
     bbox*: coordinates of the correspondent bbox, in the format:
           Bounding_Box(x, y, width, height), with x=x_center and y=y_center
+    origin: origin of the image coordinate system
 
     Return
     ------
     Area of the intersection
     """
-    left_cx = min(bbox1.x, bbox2.x)
-    right_cx = max(bbox1.x, bbox2.x)
-    down_cy = max(bbox1.y, bbox2.y)                           #TODO: check if the y origin is at top or down
-    up_cy = min(bbox1.y, bbox2.y)
-    sum_to_left = bbox1.width/2 if left_cx == bbox1.x else bbox2.width/2
-    sub_from_right = bbox1.width/2 if right_cx == bbox1.x else bbox2.width/2
-    sum_to_down = bbox1.height/2 if down_cy == bbox1.y else bbox2.height/2
-    sub_from_up = bbox1.height/2 if up_cy == bbox1.y else bbox2.height/2
-    x_intersect = max(0, ((left_cx + sum_to_left) - (right_cx - sub_from_right)))       #TODO: check if the new calculus are correct
-    y_intersect = max(0, ((down_cy + sum_to_down) - (up_cy - sub_from_up)))
+    if origin == 'top_left':
+        left_cx = min(bbox1.x, bbox2.x)
+        right_cx = max(bbox1.x, bbox2.x)
+        down_cy = max(bbox1.y, bbox2.y)                           
+        up_cy = min(bbox1.y, bbox2.y)
+        sum_to_left = bbox1.width/2 if left_cx == bbox1.x else bbox2.width/2
+        sub_from_right = bbox1.width/2 if right_cx == bbox1.x else bbox2.width/2
+        sub_from_down = bbox1.height/2 if down_cy == bbox1.y else bbox2.height/2
+        sum_to_up = bbox1.height/2 if up_cy == bbox1.y else bbox2.height/2
+        x_intersect = max(0, ((left_cx + sum_to_left) - (right_cx - sub_from_right)))       #TODO: check if the new calculus are correct
+        y_intersect = max(0, ((down_cy - sub_from_down) - (up_cy + sum_to_up)))
+    else:
+        raise ValueError("Wrong value for 'origin' argument ['top_left' is available].")
     return x_intersect * y_intersect
 
 
@@ -219,11 +223,15 @@ def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="coco"):
         if bboxes_format == "coco":
             bboxes[i] = (int(bboxes[i][0]), int(bboxes[i][1]), 
                          int(bboxes[i][0]+bboxes[i][2]), int(bboxes[i][1]+bboxes[i][3]))
-            print(bboxes[i])
+        elif bboxes_format == "centered_coco":
+            bboxes[i] = (int(bboxes[i][0]-bboxes[i][2]/2), int(bboxes[i][1]-bboxes[i][3]/2),
+                         int(bboxes[i][0]+bboxes[i][2]/2), int(bboxes[i][1]+bboxes[i][3]/2))
+        else:
+            raise ValueError("Wrong value for 'bboxes_format' arg")
         cv2.rectangle(img=image, pt1=(bboxes[i][0], bboxes[i][1]), pt2=(bboxes[i][2], bboxes[i][3]), 
                       color=(255, 0, 0), thickness=1)
         cv2.putText(img=image, text=classes[i], org=(bboxes[i][0], bboxes[i][1] - 10), 
-                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5, 
+                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.3, 
                     color=(0, 255, 255), thickness=2)
     return image
 
