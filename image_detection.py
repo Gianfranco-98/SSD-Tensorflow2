@@ -116,24 +116,7 @@ class Dataloader:
                 content = get_image_content(self.val_coco, ids[i])
             else:
                 raise ValueError("No image in the dataset with id = ", ids[i])
-            bboxes, class_labels = [], []
-            for c in content:
-                if isinstance(c.bbox[0], list):
-                    for box in c.bbox:
-                        bboxes.append(box)
-                        class_labels.append(c.object)
-                else:
-                    bboxes.append(c.bbox)
-                    class_labels.append(c.object)
-
-            print(np.array(bboxes[0]))
-            plt.imshow(images[0])
-            plt.show()
-            colors = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-            images = draw_bounding_boxes(tf.constant(images[0]), np.array(bboxes[0]), colors)
-            plt.imshow(images[0])
-            plt.show()
-
+            bboxes, class_labels = lists_from_content(content)
             transformed = self.augmentation.transform(
                 image=images[i],
                 bboxes=bboxes,
@@ -175,4 +158,4 @@ class Dataloader:
                 train_batch = self.preprocess(images=train_imgs, ids=train_ids)
                 val_batch = self.preprocess(images=val_imgs, ids=val_ids)
                 print("Done!")
-            yield train_batch, train_ids, val_batch, val_ids
+            yield train_batch, val_batch
