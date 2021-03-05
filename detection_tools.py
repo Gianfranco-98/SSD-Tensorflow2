@@ -64,7 +64,7 @@ class Transform:
 # ___________________________________ General tools ___________________________________ #
 
 
-def match_boxes(gt_boxes, pred_boxes, threshold=0.5):
+def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHECK CORRECTNESS
     """
     Match predicted boxes with ground truth boxes, as the following criterion:
         1. match the ones with the best IoU (jaccard overlap)
@@ -80,29 +80,31 @@ def match_boxes(gt_boxes, pred_boxes, threshold=0.5):
     ------
     ground_truth: the new ground truth (Labeled_Box structures)
     """
-    ground_truth = np.zeros(len(pred_boxes))
+    ground_truth = [[] for i in range(len(pred_boxes))]
     global_overlaps = []
 
     # Match boxes with maximum IoU
     for gtbox in gt_boxes:
         gt_overlaps = [jaccard_overlap(gtbox.bbox, pbox) for pbox in pred_boxes]
         global_overlaps.append(gt_overlaps)
-        max_index = overlaps.index(max(gt_overlaps))
+        max_index = gt_overlaps.index(max(gt_overlaps))
+        positive = True #if gt_overlaps[max_index] >= threshold else False
         ground_truth[max_index] = \
-            encode_box(gtbox, pred_boxes[max_index], positive=True) 
+            encode_box(gtbox, pred_boxes[max_index], positive=positive) 
 
     # Match other boxes with IoU > thresold
     global_overlaps = np.array(global_overlaps)
-    max_overlaps = np.max(global_overlaps, axis=0)
+    max_overlaps = np.max(global_overlaps, axis=0)                    #TODO: correct error zero-sized array
     max_overlaps_idxs = np.argmax(global_overlaps, axis=0)
     for def_idx, max_idx in zip(range(len(pred_boxes)), max_overlaps_idxs):
         if max_overlaps[def_idx] > threshold:
-            if ground_truth[def_idx] == 0:
+            if ground_truth[def_idx] == []:
                 ground_truth[def_idx] = \
                     encode_box(gt_boxes[max_idx], pred_boxes[def_idx], positive=True)
-        elif ground_truth[def_idx] == 0:
+        elif ground_truth[def_idx] == []:
             ground_truth[def_idx] = \
                 encode_box(gt_boxes[max_idx], pred_boxes[def_idx], positive=False)
+    return ground_truth
 
 
 def encode_box(gt_box, def_box, positive=True, variances=[0.1, 0.1, 0.2, 0.2]):
