@@ -40,7 +40,7 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     
     # Hard Negative Mining
     confidence_loss = SparseCategoricalCrossentropy(
-        from_logits=False, reduction='none'                       #TODO: check if they are logits
+        from_logits=True, reduction='none'                       #TODO: check if they are logits
     )
     l_conf = confidence_loss(gt_classes, pred_classes)
     print(l_conf)
@@ -52,7 +52,7 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     
     # Confidence loss                                                                                #TODO: if possible, avoid recompute classification loss
     confidence_loss = SparseCategoricalCrossentropy(
-        from_logits=False, reduction='sum'                       
+        from_logits=True, reduction='sum'                       
     )
     l_conf = confidence_loss(
         gt_classes[tf.math.logical_or(positive_mask, negative_mask)],
