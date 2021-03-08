@@ -66,6 +66,7 @@ class Dataloader:
     ):  
         self.batch_size = batch_size
         self.image_dim = image_dim
+        self.n_channels = n_channels
         self.image_source = image_source
         self.dataset = dataset
 
