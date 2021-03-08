@@ -59,6 +59,7 @@ class Dataloader:
         dataset, 
         batch_size=32, 
         image_dim=(300,300), 
+        n_channels=3,
         image_source="url", 
         train_obj=None, 
         val_obj=None
@@ -117,6 +118,8 @@ class Dataloader:
             else:
                 raise ValueError("No image in the dataset with id = ", ids[i])
             bboxes, class_labels = lists_from_content(content)
+            newshape = (self.image_dim[0], self.image_dim[1], self.n_channels)
+            images[i] = np.reshape(images[i], newshape)
             transformed = self.augmentation.transform(
                 image=images[i],
                 bboxes=bboxes,
