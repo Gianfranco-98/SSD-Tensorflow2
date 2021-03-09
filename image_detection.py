@@ -94,6 +94,33 @@ class Dataloader:
         print("________________________________________________________________\n") 
         #pause = input("\n\nPress Enter to continue")  
 
+    def generate_batch(self):
+        """
+        Generate a train and a validation batch
+
+        Return
+        ------
+        *_batch: list of dict, with fields:
+            'image': image read from the dataset
+            'labels': bboxes with label (Labeled_Box object)
+        """
+        for index in range(0, len(self.train_ids), self.batch_size):
+            train_indices = np.random.randint(0, len(self.train_ids), self.batch_size)
+            train_batch, val_batch = [], []
+            if self.image_source == "url":
+                train_urls = [self.train_urls[i] for i in train_indices]
+                train_ids = [self.train_ids[i] for i in train_indices]
+                val_urls = self.val_urls[index : (index + self.batch_size)]
+                val_ids = self.val_ids[index : (index + self.batch_size)]
+                print("Reading data from urls...")
+                train_imgs = [io.imread(url)/255. for url in train_urls]
+                val_imgs = [io.imread(url)/255. for url in val_urls]
+                print("Preprocessing images...")
+                train_batch = self.preprocess(images=train_imgs, ids=train_ids)
+                val_batch = self.preprocess(images=val_imgs, ids=val_ids)
+                print("Images loading complete!")
+            yield train_batch, val_batch
+
     def preprocess(self, images, ids):
         """
         Apply augmentation to image and bounding boxes and
@@ -119,8 +146,8 @@ class Dataloader:
             else:
                 raise ValueError("No image in the dataset with id = ", ids[i])
             bboxes, class_labels = lists_from_content(content)
-            newshape = (self.image_dim[0], self.image_dim[1], self.n_channels)
-            images[i] = np.reshape(images[i], newshape)
+            if len(images[i].shape) == 2 and self.n_channels == 3:
+                images[i] = self.gray_to_rgb(images[i])
             transformed = self.augmentation.transform(
                 image=images[i],
                 bboxes=bboxes,
@@ -137,29 +164,14 @@ class Dataloader:
             })
         return batch
 
-    def generate_batch(self):
+    @staticmethod
+    def gray_to_rgb(image):
         """
-        Generate a train and a validation batch
-
-        Return
-        ------
-        *_batch: list of dict, with fields:
-            'image': image read from the dataset
-            'labels': bboxes with label (Labeled_Box object)
+        Convert a grayscale image to RGB, by adding channels
         """
-        for index in range(0, len(self.train_ids), self.batch_size):
-            train_indices = np.random.randint(0, len(self.train_ids), self.batch_size)
-            train_batch, val_batch = [], []
-            if self.image_source == "url":
-                train_urls = [self.train_urls[i] for i in train_indices]
-                train_ids = [self.train_ids[i] for i in train_indices]
-                val_urls = self.val_urls[index : (index + self.batch_size)]
-                val_ids = self.val_ids[index : (index + self.batch_size)]
-                print("Reading data from urls...")
-                train_imgs = [io.imread(url)/255. for url in train_urls]
-                val_imgs = [io.imread(url)/255. for url in val_urls]
-                print("Preprocessing images...")
-                train_batch = self.preprocess(images=train_imgs, ids=train_ids)
-                val_batch = self.preprocess(images=val_imgs, ids=val_ids)
-                print("Done!")
-            yield train_batch, val_batch
+        dim = np.zeros(shape=(image.shape[0], image.shape[1]))
+        red_image = np.stack((image/255., dim, dim), axis=2)
+        green_image = np.stack((dim, image/255., dim), axis=2)
+        blu_image = np.stack((dim, dim, image/255.), axis=2)
+        rgb_image = red_image + green_image + blu_image
+        return rgb_image
