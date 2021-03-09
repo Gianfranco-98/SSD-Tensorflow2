@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import warnings
+import numpy as np
 import tensorflow as tf
 from base_models.vgg16_new import VGG16
 from tensorflow.keras import Model, Sequential
@@ -145,18 +146,30 @@ class BaseNet(Powered_Sequential):
     """
     def __init__(self, architecture, input_shape, name="BaseNet"):
 
-        if architecture == "VGG16" or architecture == "VGG-16":    
+        if architecture in ["VGG16", "VGG-16", "VGG_16"]:
 
-            # 1. Copy VGG pre-trained network
+            # 1.1. Copy VGG16 pre-trained network
             arch = VGG16(include_top=False, weights='imagenet', input_shape=input_shape)
-            layers = arch.layers[0:-1]
+            base_layers = arch.layers[0:-1]
+
+            # 1.2. Copy VGG16 head layers
+            dummy_arch = VGG16(include_top=True, weights='imagenet') 
+            head_layers = dummy_arch.layers[-4:]
 
             # 2. Add new head
-            layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[-1].name))
-            layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6"))
-            layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7"))
+            base_layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[0].name))
+            base_layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6"))
+            base_layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7"))
+
+            # 3. Copy old fc6, fc7 weights into new head layers
+            fc6_weights = head_layers[1].weights
+            fc7_weights = head_layers[2].weights
+            base_layers[-2].set_weights(np.random.choice(np.reshape(fc6_weights, (-1,)), (3, 3, 512, 1024)))
+            base_layers[-1].set_weights(np.random.choice(np.reshape(fc7_weights, (-1,)), (1, 1, 1024, 1024)))
+
+            # 4. Instantiate model
             super(BaseNet, self).__init__(
-                layers=layers,
+                layers=base_layers,
                 name=name
             )
 
