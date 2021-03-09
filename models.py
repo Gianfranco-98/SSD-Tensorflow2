@@ -154,24 +154,28 @@ class BaseNet(Powered_Sequential):
 
             # 1.2. Copy VGG16 head layers
             dummy_arch = VGG16(include_top=True, weights='imagenet') 
-            head_layers = dummy_arch.layers[-4:]
+            head_layers = dummy_arch.layers[-3:]
 
             # 2. Add new head
-            base_layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[0].name))
+            base_layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[-1].name))
             base_layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6"))
             base_layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7"))
 
-            # 3. Copy old fc6, fc7 weights into new head layers
-            fc6_weights = head_layers[1].weights
-            fc7_weights = head_layers[2].weights
-            base_layers[-2].set_weights(np.random.choice(np.reshape(fc6_weights, (-1,)), (3, 3, 512, 1024)))
-            base_layers[-1].set_weights(np.random.choice(np.reshape(fc7_weights, (-1,)), (1, 1, 1024, 1024)))
-
-            # 4. Instantiate model
+            # 3. Instantiate model
             super(BaseNet, self).__init__(
                 layers=base_layers,
                 name=name
             )
+
+            # 4. Copy old fc6, fc7 weights into new head layers
+            fc6_weights, fc6_biases = head_layers[0].get_weights()
+            fc7_weights, fc7_biases = head_layers[1].get_weights()
+            self.layers[-2].set_weights([
+              np.random.choice(np.reshape(fc6_weights, (-1,)), (3, 3, 512, 1024)),
+              np.random.choice(fc6_biases, (1024,))])
+            self.layers[-1].set_weights([
+              np.random.choice(np.reshape(fc7_weights, (-1,)), (1, 1, 1024, 1024)),
+              np.random.choice(fc7_biases, (1024,))])
 
         else:
             raise TypeError("Wrong name for the base architecture")
