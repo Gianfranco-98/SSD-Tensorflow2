@@ -36,7 +36,7 @@ class SSD(Model):
             input_shape=input_shape,
             name="SSD_Base"
         )
-        self.extra_layers = ExtraNet(
+        self.extra_layers = ExtraNet(                       #TODO: Xavier initialization
             layers = [
                 Input(shape=self.base[-1].output_shape[1:], name="input_extra"),
                 ## Conv 8 
@@ -54,7 +54,7 @@ class SSD(Model):
             ],
             name="SSD_Extra_Layers"
         )
-        self.detector = DetectorNet(
+        self.detector = DetectorNet(                        #TODO: Xavier initialization
             input_layers = [
                 Input(shape=self.base["block4_conv3"].output_shape[1:], name="input_predict4_3"),
                 Input(shape=self.base["head_conv7"].output_shape[1:], name="input_predict7"),
