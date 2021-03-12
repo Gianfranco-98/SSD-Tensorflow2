@@ -80,7 +80,8 @@ class Dataloader:
                 self.val_coco = COCO(VAL_ANN_PATH)
             self.train_ids, self.train_urls, self.labels = global_info(self.train_coco)
             self.val_ids, self.val_urls, self.labels = global_info(self.val_coco)
-            self.labels_dict = {i:value for i, value in zip(self.val_coco.getCatIds(), self.labels)}
+            self.labels_names = {i:value for i, value in zip(self.val_coco.getCatIds(), self.labels)}
+            self.labels_dict = {i:j for i,j in zip(self.val_coco.getCatIds(), list(range(1, len(self.labels)+1)))}
             self.augmentation = Transform(image_dim=self.image_dim, image_format='coco')
         else:       
             raise TypeError("Wrong or unsupported dataset." +
@@ -94,32 +95,50 @@ class Dataloader:
         print("________________________________________________________________\n") 
         #pause = input("\n\nPress Enter to continue")  
 
-    def generate_batch(self):
+    def generate_batch(self, phase="train"):
         """
         Generate a train and a validation batch
 
+        Parameters
+        ----------
+        phase: 'train' or 'eval'
+
         Return
         ------
-        *_batch: list of dict, with fields:
+        batch: list of dict, with fields:
             'image': image read from the dataset
             'labels': bboxes with label (Labeled_Box object)
+        ids: ids of the images in the batch
         """
-        for index in range(0, len(self.train_ids), self.batch_size):
-            train_indices = np.random.randint(0, len(self.train_ids), self.batch_size)
-            train_batch, val_batch = [], []
-            if self.image_source == "url":
-                train_urls = [self.train_urls[i] for i in train_indices]
-                train_ids = [self.train_ids[i] for i in train_indices]
-                val_urls = self.val_urls[index : (index + self.batch_size)]
-                val_ids = self.val_ids[index : (index + self.batch_size)]
-                print("Reading data from urls...")
-                train_imgs = [io.imread(url)/255. for url in train_urls]
-                val_imgs = [io.imread(url)/255. for url in val_urls]
-                print("Preprocessing images...")
-                train_batch = self.preprocess(images=train_imgs, ids=train_ids)
-                val_batch = self.preprocess(images=val_imgs, ids=val_ids)
-                print("Images loading complete!")
-            yield train_batch, val_batch
+        ids, urls = [], []
+        if phase == "train":
+            generator_len = len(self.train_ids)
+        elif phase == "eval":
+            generator_len = len(self.val_ids)
+        else:
+            raise ValueError("Wrong value for arg 'phase'. Available 'train' or 'eval'")
+        
+        for index in range(0, generator_len, self.batch_size):
+            if phase == "train":
+                indices = np.random.randint(0, len(self.train_ids), self.batch_size)
+                for i in indices:
+                    ids.append(self.train_ids[i])
+                    if self.image_source == "url":
+                        urls.append(self.train_urls[i])
+            else:
+                for i in indices:
+                    ids.append(self.val_ids[i])
+                    if self.image_source == "url":
+                        urls.append(self.val_urls[i])
+            if len(urls) > 0:
+                print(" - Reading data from urls...")
+                imgs = [io.imread(url) for url in urls]
+            else:
+                #TODO: manage loading from disk
+                pass
+            print(" - Preprocessing images...")
+            batch = self.preprocess(imgs, ids)
+            yield batch, ids
 
     def preprocess(self, images, ids):
         """
@@ -155,6 +174,7 @@ class Dataloader:
             )
             img_transformed = transformed['image']
             bboxes_transformed = transformed['bboxes']
+            class_labels = [self.labels_dict[class_labels[i]] for i in range(len(class_labels))]
             labeled_boxes = []
             for box, label in zip(bboxes_transformed, class_labels): 
                 labeled_boxes.append(Labeled_Box(bbox=Bounding_Box(*box), label=label))
