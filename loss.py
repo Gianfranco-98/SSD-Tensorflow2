@@ -36,14 +36,12 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     # Process predicted data
     pred_classes = prediction[..., :num_classes]
     pred_bboxes = prediction[..., num_classes:]
-    print(pred_classes.shape, pred_classes[0][0])
     
     # Hard Negative Mining
     confidence_loss = SparseCategoricalCrossentropy(
-        from_logits=True, reduction='none'                       #TODO: check if they are logits
+        from_logits=True, reduction='none'                       
     )
     l_conf = confidence_loss(gt_classes, pred_classes)
-    print(l_conf)
     positive_mask = gt_classes > 0
     positives_num = len(positive_mask)
     negatives_num = hard_negative_ratio * positives_num
