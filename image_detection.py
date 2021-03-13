@@ -19,11 +19,12 @@ VAL_ANN_PATH = './annotations/instances_val2017.json'
 
 class Feature_Map(object):
 
-    def __init__(self, feature_map, aspect_ratios, sk, sk1):
+    def __init__(self, feature_map, aspect_ratios, sk, sk1, clip_box=True):
         self.feature_map = feature_map
         self.aspect_ratios = aspect_ratios
         self.sk = sk
         self.sk1 = sk1
+        self.clip = clip_box
 
     @property
     def shape(self):
@@ -32,23 +33,27 @@ class Feature_Map(object):
     @property
     def default_boxes(self):
         boxes = []
-        x_size = self.feature_map.shape[2]
-        y_size = self.feature_map.shape[1]
+        x_size = self.shape[2]
+        y_size = self.shape[1]
         fk = x_size = y_size
         for i, j in product(range(x_size), range(y_size)):          
             for ar in self.aspect_ratios:
                 width = self.sk * math.sqrt(ar)
                 height = self.sk / math.sqrt(ar)
-                x_center = (i + 0.5) / fk
-                y_center = (j + 0.5) / fk
-                boxes.append(Bounding_Box(x_center, y_center, width, height))
+                x_center = (j + 0.5) / fk
+                y_center = (i + 0.5) / fk
+                boxes.append([x_center, y_center, width, height])
                 if ar == 1:
                     new_sk = math.sqrt(self.sk*self.sk1)
-                    width = new_sk * math.sqrt(ar)
-                    height = new_sk / math.sqrt(ar)
                     x_center = (i + 0.5) / fk
                     y_center = (j + 0.5) / fk
-                    boxes.append(Bounding_Box(x_center, y_center, width, height))
+                    boxes.append([x_center, y_center, new_sk, new_sk])
+        
+        # clip and convert to Bounding_Box format
+        for b, box in enumerate(boxes):
+            if self.clip:
+                boxes[b] = np.clip(box, a_min=0, a_max=1)
+            boxes[b] = Bounding_Box(*box)
         return boxes
 
 
@@ -91,7 +96,7 @@ class Dataloader:
         print("_____________________________ INFO _____________________________\n")
         print("Train set = %i images [%s]" % (len(self.train_ids), self.image_source))
         print("Eval set = %i images [%s]" % (len(self.val_ids), self.image_source))
-        print("%d Labels:\n%s" % (len(self.labels_dict), self.labels_dict))
+        print("%d Labels:\n%s" % (len(self.labels_names), self.labels_names))
         print("________________________________________________________________\n") 
         #pause = input("\n\nPress Enter to continue")  
 
@@ -140,7 +145,7 @@ class Dataloader:
             batch = self.preprocess(imgs, ids)
             yield batch, ids
 
-    def preprocess(self, images, ids):
+    def preprocess(self, images, ids):                                          #TODO: speed up
         """
         Apply augmentation to image and bounding boxes and
         convert to convenient structures
