@@ -97,7 +97,6 @@ def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHE
         gt_overlaps = [jaccard_overlap(gtbox.bbox, pbox) for pbox in pred_boxes]
         global_overlaps.append(gt_overlaps)
         max_index = gt_overlaps.index(max(gt_overlaps))
-        print(gtbox, pred_boxes[max_index], gt_overlaps[max_index])
         positive = True #if gt_overlaps[max_index] >= threshold else False
         ground_truth[max_index] = \
             encode_box(gtbox, pred_boxes[max_index], positive=positive) 
@@ -106,8 +105,8 @@ def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHE
     global_overlaps = np.array(global_overlaps)
     max_overlaps = np.max(global_overlaps, axis=0)                    
     max_overlaps_idxs = np.argmax(global_overlaps, axis=0)
-    print(max_overlaps)
-    print(max_overlaps_idxs)
+    #print(max_overlaps)
+    #print(max_overlaps_idxs)
     for def_idx, max_idx in zip(range(len(pred_boxes)), max_overlaps_idxs):
         if max_overlaps[def_idx] > threshold:
             if ground_truth[def_idx] == []:
@@ -191,12 +190,20 @@ def get_intersection(bbox1, bbox2, origin='top_left'):
         right_cx = max(bbox1.x, bbox2.x)
         down_cy = max(bbox1.y, bbox2.y)                           
         up_cy = min(bbox1.y, bbox2.y)
-        sum_to_left = bbox1.width/2 if left_cx == bbox1.x else bbox2.width/2
-        sub_from_right = bbox1.width/2 if right_cx == bbox1.x else bbox2.width/2
-        sub_from_down = bbox1.height/2 if down_cy == bbox1.y else bbox2.height/2
-        sum_to_up = bbox1.height/2 if up_cy == bbox1.y else bbox2.height/2
+        if left_cx == right_cx:
+            sum_to_left = bbox1.width/2
+            sub_from_right = bbox2.width/2
+        else:
+            sum_to_left = bbox1.width/2 if left_cx == bbox1.x else bbox2.width/2
+            sub_from_right = bbox1.width/2 if right_cx == bbox1.x else bbox2.width/2
+        if up_cy == down_cy:
+            sum_to_up = bbox1.height/2
+            sub_from_down = bbox2.height/2
+        else:
+            sum_to_up = bbox1.height/2 if up_cy == bbox1.y else bbox2.height/2
+            sub_from_down = bbox1.height/2 if down_cy == bbox1.y else bbox2.height/2
         x_intersect = max(0, (min((left_cx + sum_to_left), (right_cx + sub_from_right)) -
-                              max((left_cx - sum_to_left), (right_cx - sub_from_down))))
+                              max((left_cx - sum_to_left), (right_cx - sub_from_right))))
         y_intersect = max(0, (min((up_cy + sum_to_up), (down_cy + sub_from_down)) - 
                               max((up_cy - sum_to_up), (down_cy - sub_from_down))))
     else:
