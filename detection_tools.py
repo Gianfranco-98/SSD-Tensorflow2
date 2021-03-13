@@ -97,14 +97,17 @@ def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHE
         gt_overlaps = [jaccard_overlap(gtbox.bbox, pbox) for pbox in pred_boxes]
         global_overlaps.append(gt_overlaps)
         max_index = gt_overlaps.index(max(gt_overlaps))
+        print(gtbox, pred_boxes[max_index], gt_overlaps[max_index])
         positive = True #if gt_overlaps[max_index] >= threshold else False
         ground_truth[max_index] = \
             encode_box(gtbox, pred_boxes[max_index], positive=positive) 
 
     # Match other boxes with IoU > thresold
     global_overlaps = np.array(global_overlaps)
-    max_overlaps = np.max(global_overlaps, axis=0)                    #TODO: correct error zero-sized array
+    max_overlaps = np.max(global_overlaps, axis=0)                    
     max_overlaps_idxs = np.argmax(global_overlaps, axis=0)
+    print(max_overlaps)
+    print(max_overlaps_idxs)
     for def_idx, max_idx in zip(range(len(pred_boxes)), max_overlaps_idxs):
         if max_overlaps[def_idx] > threshold:
             if ground_truth[def_idx] == []:
@@ -160,10 +163,16 @@ def jaccard_overlap(bbox1, bbox2):
     """
     intersection = get_intersection(bbox1, bbox2)
     union = get_union(bbox1, bbox2, intersection)
+    if (intersection / union) > 1:
+        print("Intersection = ", intersection)
+        print("Union = ", union)
+        print("bbox1: ", bbox1)
+        print("bbox2: ", bbox2)
+        a = input("Press Enter to continue...")
     return intersection / union
 
 
-def get_intersection(bbox1, bbox2, origin='top_left'):
+def get_intersection(bbox1, bbox2, origin='top_left'):                                  
     """
     Calculate area of the intersection of the 2 given bounding boxes
 
@@ -186,8 +195,10 @@ def get_intersection(bbox1, bbox2, origin='top_left'):
         sub_from_right = bbox1.width/2 if right_cx == bbox1.x else bbox2.width/2
         sub_from_down = bbox1.height/2 if down_cy == bbox1.y else bbox2.height/2
         sum_to_up = bbox1.height/2 if up_cy == bbox1.y else bbox2.height/2
-        x_intersect = max(0, ((left_cx + sum_to_left) - (right_cx - sub_from_right)))       #TODO: check if the new calculus are correct
-        y_intersect = max(0, ((down_cy - sub_from_down) - (up_cy + sum_to_up)))
+        x_intersect = max(0, (min((left_cx + sum_to_left), (right_cx + sub_from_right)) -
+                              max((left_cx - sum_to_left), (right_cx - sub_from_down))))
+        y_intersect = max(0, (min((up_cy + sum_to_up), (down_cy + sub_from_down)) - 
+                              max((up_cy - sum_to_up), (down_cy - sub_from_down))))
     else:
         raise ValueError("Wrong value for 'origin' argument ['top_left' is available].")
     return x_intersect * y_intersect
@@ -241,9 +252,10 @@ def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="coco"):
             raise ValueError("Wrong value for 'bboxes_format' arg")
         cv2.rectangle(img=image, pt1=(bboxes[i][0], bboxes[i][1]), pt2=(bboxes[i][2], bboxes[i][3]), 
                       color=(255, 0, 0), thickness=1)
-        cv2.putText(img=image, text=classes[i], org=(bboxes[i][0], bboxes[i][1] - 10), 
-                    fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.3, 
-                    color=(0, 255, 255), thickness=2)
+        if classes is not None:
+            cv2.putText(img=image, text=classes[i], org=(bboxes[i][0], bboxes[i][1] - 10), 
+                        fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.3, 
+                        color=(0, 255, 255), thickness=2)
     return image
 
 
@@ -340,6 +352,24 @@ def global_info(coco):
     labels = [coco.cats[id]['name'] for id in coco.getCatIds()]
     return ids, urls, labels
 
+
+def normalize_coco_bbox(bbox, image_width, image_height):
+    """
+    1. Center bbox
+        Convert a coco ground truth bbox in the format:
+            Bounding_Box(x_min, y_min, width, heigth)
+        In order to have it in the format: 
+            Bounding_Box(x_center, y_center, width, height)
+    2. Normalize in the range (0, 1)
+    """
+    x_center, y_center, width, height = center_coco_bbox(bbox)
+    return Bounding_Box(
+      x_center / image_width,
+      y_center / image_height,
+      width / image_width,
+      height / image_height
+    )
+    
 
 def center_coco_bbox(bbox):
     """
