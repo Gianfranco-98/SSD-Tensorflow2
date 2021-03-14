@@ -64,7 +64,7 @@ class Transform:
 # ___________________________________ General tools ___________________________________ #
 
 
-def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHECK CORRECTNESS
+def match_boxes(gt_boxes, pred_boxes, threshold=0.5):                 #TODO: CHECK CORRECTNESS AND SPEED UP
     """
     Match predicted boxes with ground truth boxes, as the following criterion:
         1. match the ones with the best IoU (jaccard overlap)
