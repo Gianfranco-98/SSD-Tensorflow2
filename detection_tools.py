@@ -2,8 +2,10 @@
 
 from pycocotools.coco import COCO
 from collections import namedtuple
-import cv2
+from tqdm import tqdm
 
+import cv2
+import time
 import numpy as np
 
 import albumentations as A
@@ -292,6 +294,29 @@ def lists_from_content(image_content):
     return bboxes_list, classes_list
 
 # ____________________________________ COCO tools ____________________________________ #
+
+
+def get_detection_data(coco, ID_list):
+    """
+    Given COCO object, return the list of ALL bounding box and relative labels for each image
+
+    Parameters
+    ----------
+    coco: COCO object
+    ID_list: list of ID of all images
+
+    Return
+    ------
+    bboxes: 3-dimensional list: bounding boxes of all images
+    labels: 2-dimensional list: labels of all images
+    """
+    bboxes = [[] for i in range(len(ID_list))]
+    labels = [[] for i in range(len(ID_list))]
+    for ann_dict in tqdm(coco.anns.items()):
+        index = ID_list.index(ann_dict[1]['image_id'])
+        bboxes[index].append(ann_dict[1]['bbox'])
+        labels[index].append(ann_dict[1]['category_id'])
+    return bboxes, labels
 
 
 def get_image_content(coco, ID):
