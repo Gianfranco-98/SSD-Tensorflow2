@@ -39,16 +39,16 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     
     # Hard Negative Mining
     confidence_loss = SparseCategoricalCrossentropy(
-        from_logits=True, reduction='none'                       
+        from_logits=True, reduction='none'                      
     )
-    l_conf = confidence_loss(gt_classes, pred_classes)
+    l_conf_tmp = confidence_loss(gt_classes, pred_classes)
     positive_mask = gt_classes > 0
-    positives_num = len(positive_mask)
+    positives_num = tf.reduce_sum(tf.dtypes.cast(positive_mask, tf.int32), axis=1)                 
     negatives_num = hard_negative_ratio * positives_num
-    sorted_indices = tf.argsort(l_conf, axis=0, direction='DESCENDING')                             #TODO: adjust axis ?
-    negative_mask = tf.argsort(sorted_indices, axis=0) < negatives_num      #TODO: expand dims ?
+    sorted_indices = tf.argsort(l_conf_tmp, axis=1, direction='DESCENDING')                            
+    negative_mask = tf.argsort(sorted_indices, axis=1) < tf.expand_dims(negatives_num, 1)
     
-    # Confidence loss                                                                                #TODO: if possible, avoid recompute classification loss
+    # Confidence loss                                                                                
     confidence_loss = SparseCategoricalCrossentropy(
         from_logits=True, reduction='sum'                       
     )
@@ -62,9 +62,10 @@ def ssd_loss(ground_truth, prediction, num_classes=80, hard_negative_ratio=3, al
     l_loc = localization_loss(gt_bboxes[positive_mask], pred_bboxes[positive_mask])
 
     # multibox loss
-    if positives_num == 0:
-        loss = 0                                            #TODO: WHY 0 ?
+    N = tf.reduce_sum(tf.dtypes.cast(positives_num, tf.float32))
+    if N == 0:
+        loss = 0                                            
     else:
-        loss = (l_conf + alpha * l_loc) / positives_num     #TODO: ensure 1/N is correct here
+        loss = (l_conf + alpha * l_loc) / N                 
 
     return loss, l_loc, l_conf
