@@ -209,6 +209,10 @@ class DetectorNet(Powered_Model):
     def __len__(self):
         return len(self.layers)
 
+    @property
+    def output_shape(self):
+        return [pred.output_shape for pred in self.predictors]
+
     def call(self, inputs, training=False):
         outputs = []
         for i in range(len(inputs)):
