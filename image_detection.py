@@ -1,20 +1,40 @@
 #!/usr/bin/env python3
 
+# Dataset 
+from data_configuration import *
+
+# Image
 from detection_tools import *
 from skimage import io
-import numpy as np
-from collections import namedtuple
 from cv2 import resize
+
+# Math
 import matplotlib.pyplot as plt
-
-from itertools import product
+import numpy as np
 import math
-import time
+
+# Generic
+from collections import namedtuple
+from itertools import product
 
 
-TRAIN_ANN_PATH = './annotations/instances_train2017.json'
-VAL_ANN_PATH = './annotations/instances_val2017.json'
+class Image(object):
 
+    def __init__(self, image=None, name=None):
+        self.image = image
+        self.name = name
+
+    @staticmethod
+    def generate_default_boxes(feature_map_shapes, aspect_ratios, scales):
+        default_boxes = []
+        for i in range(len(scales)-1):
+            if feature_map_shapes[i][0] is None:
+                feature_map_shapes[i] = (1, feature_map_shapes[i][1], feature_map_shapes[i][2])
+            fm = Feature_Map(np.zeros(feature_map_shapes[i]), aspect_ratios[i], scales[i], scales[i+1])
+            for box in fm.default_boxes:
+                default_boxes.append(corner_bbox(tf.constant(box)))
+        return default_boxes
+      
 
 class Feature_Map(object):
 
@@ -56,42 +76,6 @@ class Feature_Map(object):
         return boxes
 
 
-class Dataset:
-
-    def __init__(
-        self,
-        train_obj,
-        val_obj,
-        name="COCO",
-        image_dim=(300, 300),
-        n_channels=3,
-        image_source="url"
-    ):
-        self.name = name
-        self.image_dim = image_dim
-        self.n_channels = n_channels
-        self.image_source = image_source
-
-        if self.name == "COCO":
-            self.train_coco = train_obj
-            self.val_coco = val_obj
-            self.train_ids, self.train_urls, self.labels = global_info(self.train_coco)
-            self.val_ids, self.val_urls, self.labels = global_info(self.val_coco)
-            self.train_bboxes, self.train_labels = get_detection_data(self.train_coco, self.train_ids)
-            self.val_bboxes, self.val_labels = get_detection_data(self.val_coco, self.val_ids)
-            self.labels_names = {i:value for i, value in zip(self.val_coco.getCatIds(), self.labels)}
-            self.labels_dict = {i:j for i,j in zip(self.val_coco.getCatIds(), list(range(1, len(self.labels)+1)))}
-        else:
-            raise ValueError("Wrong name for 'name' arg. Available 'COCO'")
-
-    def get_info(self):
-        print("_____________________________ INFO _____________________________\n")
-        print("Train set = %i images [%s]" % (len(self.train_ids), self.image_source))
-        print("Eval set = %i images [%s]" % (len(self.val_ids), self.image_source))
-        print("%d Labels:\n%s" % (len(self.labels_names), self.labels_names))
-        print("________________________________________________________________\n") 
-
-
 class Dataloader:
 
     def __init__(
@@ -101,11 +85,13 @@ class Dataloader:
     ):  
         self.data = dataset
         self.batch_size = batch_size
-
         if self.data.name == "COCO":
-            self.augmentation = Transform(image_dim=self.data.image_dim, image_format='coco')
-        else:       
-            raise TypeError("Wrong or unsupported dataset. Available: 'COCO'")
+            self.image_format = "coco"
+        elif self.data.name == "VOC":
+            self.image_format = "pascal_voc"
+        else:
+            raise ValueError("Wrong or unsupported dataset. Available: 'COCO' or 'VOC'")
+        self.augmentation = Transform(image_dim=self.data.image_dim, image_format=self.image_format)
 
     def generate_batch(self, phase="train"):
         """
@@ -131,39 +117,36 @@ class Dataloader:
             raise ValueError("Wrong value for arg 'phase'. Available 'train' or 'eval'")
         
         for index in range(0, generator_len, self.batch_size):
+            pool = mp.Pool(processes=NUM_WORKERS)
             if phase == "train":
                 indices = np.random.randint(0, len(self.data.train_ids), self.batch_size)
                 ids = [self.data.train_ids[i] for i in indices]
                 if self.data.image_source == "url":
                     print(" - Reading data from urls...")
-                    start = time.time()
                     urls = [self.data.train_urls[i] for i in indices]
-                    imgs = [io.imread(url) for url in urls]
-                    end = time.time()
-                    print("\t - [%f s]" % (end - start))
+                    imgs = pool.map(self.read_url, urls)
                 else:
-                    #TODO: manage loading from disk
-                    pass
+                    print(" - Reading data from disk...")
+                    filenames = [self.data.train_filenames[i] for i in indices]
+                    imgs = pool.map(self.read_img, filenames)
             else:
-                ids = self.data.val_ids[index : (index + self.batch_size)]
+                indices = list(range(index, (index + self.batch_size)))
+                ids = [self.data.val_ids[i] for i in indices]
                 if self.data.image_source == "url":
                     print(" - Reading data from urls...")
-                    start = time.time()
-                    urls = self.data.val_urls[index : (index + self.batch_size)]
-                    imgs = [io.imread(url) for url in urls]
-                    end = time.time()
-                    print("\t - [%f s]" % (end - start))
+                    urls = [self.data.val_urls[i] for i in indices]
+                    imgs = pool.map(self.read_url, urls)
                 else:
-                    #TODO: manage loading from disk
-                    pass
+                    print(" - Reading data from disk...")
+                    filenames = [self.data.val_filenames[i] for i in indices]
+                    imgs = pool.map(self.read_img, indices)          
+            pool.close()
+            pool.join()                    
             print(" - Preprocessing images...")
-            start = time.time()
-            batch = self.preprocess(imgs, ids, phase)
-            end = time.time()
-            print("\t - [%f s]" % (end - start))
-            yield batch, ids
+            images, labels = self.preprocess(imgs, ids, phase)
+            yield images, labels, ids
 
-    def preprocess(self, images, ids, phase):                                          
+    def preprocess(self, images, ids, phase, normalize=True):                                          
         """
         Apply augmentation to image and bounding boxes and
         convert to convenient structures
@@ -173,6 +156,9 @@ class Dataloader:
         images: list of images to convert
         ids: list of images id
         phase: 'train' or 'eval'
+        normalize: if True, bboxes are normalized in range [0, 1]
+                  and converted to list format (useful during train
+                  for efficiency reasons)
 
         Return
         ------
@@ -180,7 +166,7 @@ class Dataloader:
             'image': image read from the dataset
             'labels': bboxes with label (Labeled_Box object) relative to the image
         """
-        batch = []
+        processed_images, processed_labels = [], []
         for i in range(len(images)):
             img_index = self.get_img_index(ids[i], phase)
             if phase == "train":
@@ -198,15 +184,21 @@ class Dataloader:
             )
             img_transformed = transformed['image']
             bboxes_transformed = transformed['bboxes']
-            class_labels = [self.data.labels_dict[class_labels[i]] for i in range(len(class_labels))]
+            class_labels = [self.data.labels_dict[cl] for cl in class_labels]
             labeled_boxes = []
-            for box, label in zip(bboxes_transformed, class_labels): 
-                labeled_boxes.append(Labeled_Box(bbox=Bounding_Box(*box), label=label))
-            batch.append({
-                'image': img_transformed,
-                'labels': labeled_boxes
-            })
-        return batch
+            if normalize:
+                labeled_boxes = [normalize_bbox(
+                                  bboxes_transformed[i],
+                                  self.data.image_dim[0], self.data.image_dim[1],
+                                  class_labels[i],
+                                  self.image_format)
+                                 for i in range(len(class_labels))]
+            else:
+                for box, label in zip(bboxes_transformed, class_labels): 
+                    labeled_boxes.append(Labeled_Box(bbox=Bounding_Box(*box), label=label))
+            processed_images.append(img_transformed)
+            processed_labels.append(labeled_boxes)
+        return processed_images, processed_labels
 
     def get_img_index(self, id, phase):
         """
@@ -226,3 +218,17 @@ class Dataloader:
         blu_image = np.stack((dim, dim, image/255.), axis=2)
         rgb_image = red_image + green_image + blu_image
         return rgb_image
+
+    @staticmethod
+    def read_img(filename):
+        """
+        Read an image, given the filename
+        """
+        return cv2.imread(filename)
+
+    @staticmethod
+    def read_url(url):
+        """
+        Read an URL into an image
+        """
+        return io.imread(url)
