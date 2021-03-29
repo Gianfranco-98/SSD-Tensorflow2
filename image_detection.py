@@ -16,6 +16,7 @@ import math
 # Generic
 from collections import namedtuple
 from itertools import product
+import multiprocessing as mp
 
 
 class Image(object):
