@@ -87,6 +87,15 @@ class SSD(Model):
             self.detector.layers
         )
 
+    @property
+    def output_shape(self):
+        return self.detector.output_shape
+
+    def save_weights(self, PATH):
+        self.base.save_weights(PATH)
+        self.extra_layers.save_weights(PATH)
+        self.detector.save_weights(PATH)
+
     def summary(self):
         self.base.summary()
         self.extra_layers.summary()
