@@ -20,6 +20,21 @@ Reference:
     (https://arxiv.org/abs/1409.1556) (ICLR 2015)
 """
 
+
+
+
+"""
+------------------------------ IMPORTANT NOTICE --------------------------------
+This is a modified version of the original tensorflow.keras.applications.vgg16.
+The only difference between the original one is the <<padding="same">> arg in 
+block3_pool, in order to have output shape of SSD feature maps equal to 
+[38, 19, 10, 5, 3, 1]
+--------------------------------------------------------------------------------
+"""
+
+
+
+
 import tensorflow.compat.v2 as tf
 
 from keras import backend
