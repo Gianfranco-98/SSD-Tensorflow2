@@ -19,32 +19,15 @@ Reference:
   - [Very Deep Convolutional Networks for Large-Scale Image Recognition]
     (https://arxiv.org/abs/1409.1556) (ICLR 2015)
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
+import tensorflow.compat.v2 as tf
 
-
-
-"""
------------------------------- IMPORTANT NOTICE --------------------------------
-This is a modified version of the original tensorflow.keras.applications.vgg16.
-The only difference between the original one is the <<padding="same">> arg in 
-block3_pool, in order to have output shape of SSD feature maps equal to 
-[38, 19, 10, 5, 3, 1]
---------------------------------------------------------------------------------
-"""
-
-
-
-
-from tensorflow.python.keras import backend
-from tensorflow.python.keras.applications import imagenet_utils
-from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.layers import VersionAwareLayers
-from tensorflow.python.keras.utils import data_utils
-from tensorflow.python.keras.utils import layer_utils
-from tensorflow.python.lib.io import file_io
+from keras import backend
+from keras.applications import imagenet_utils
+from keras.engine import training
+from keras.layers import VersionAwareLayers
+from keras.utils import data_utils
+from keras.utils import layer_utils
 from tensorflow.python.util.tf_export import keras_export
 
 
@@ -72,20 +55,24 @@ def VGG16(
   - [Very Deep Convolutional Networks for Large-Scale Image Recognition](
   https://arxiv.org/abs/1409.1556) (ICLR 2015)
 
-  By default, it loads weights pre-trained on ImageNet. Check 'weights' for
-  other options.
+  For image classification use cases, see
+  [this page for detailed examples](
+    https://keras.io/api/applications/#usage-examples-for-image-classification-models).
 
-  This model can be built both with 'channels_first' data format
-  (channels, height, width) or 'channels_last' data format
-  (height, width, channels).
+  For transfer learning use cases, make sure to read the
+  [guide to transfer learning & fine-tuning](
+    https://keras.io/guides/transfer_learning/).
 
   The default input size for this model is 224x224.
 
   Note: each Keras Application expects a specific kind of input preprocessing.
   For VGG16, call `tf.keras.applications.vgg16.preprocess_input` on your
   inputs before passing them to the model.
+  `vgg16.preprocess_input` will convert the input images from RGB to BGR,
+  then will zero-center each color channel with respect to the ImageNet dataset,
+  without scaling.
 
-  Arguments:
+  Args:
       include_top: whether to include the 3 fully-connected
           layers at the top of the network.
       weights: one of `None` (random initialization),
@@ -119,17 +106,13 @@ def VGG16(
       classifier_activation: A `str` or callable. The activation function to use
           on the "top" layer. Ignored unless `include_top=True`. Set
           `classifier_activation=None` to return the logits of the "top" layer.
+          When loading pretrained weights, `classifier_activation` can only
+          be `None` or `"softmax"`.
 
   Returns:
     A `keras.Model` instance.
-
-  Raises:
-    ValueError: in case of invalid argument for `weights`,
-      or invalid input shape.
-    ValueError: if `classifier_activation` is not `softmax` or `None` when
-      using a pretrained top layer.
   """
-  if not (weights in {'imagenet', None} or file_io.file_exists_v2(weights)):
+  if not (weights in {'imagenet', None} or tf.io.gfile.exists(weights)):
     raise ValueError('The `weights` argument should be either '
                      '`None` (random initialization), `imagenet` '
                      '(pre-training on ImageNet), '
@@ -176,7 +159,7 @@ def VGG16(
       256, (3, 3), activation='relu', padding='same', name='block3_conv2')(x)
   x = layers.Conv2D(
       256, (3, 3), activation='relu', padding='same', name='block3_conv3')(x)
-  x = layers.MaxPooling2D((2, 2), strides=(2, 2), padding="same", name='block3_pool')(x)    
+  x = layers.MaxPooling2D((2, 2), strides=(2, 2), padding='same', name='block3_pool')(x)
 
   # Block 4
   x = layers.Conv2D(
