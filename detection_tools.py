@@ -1,14 +1,17 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-from pycocotools.coco import COCO
-from collections import namedtuple
-import xml.etree.ElementTree as ET
-import cv2
+
+# Stock libraries
 import os
-
+import cv2
+import random
 import numpy as np
-
-import albumentations as A
+from tqdm import tqdm
+from math import ceil
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import xml.etree.ElementTree as ET
+from collections import namedtuple
 
 
 # _________________________________ Useful structures _________________________________ #
@@ -51,18 +54,6 @@ Fields
 Labeled_Box = namedtuple("Labeled_Box", field_names = \
     ['bbox', 'label'])
 
-# ___________________________________ Augmentation ___________________________________ #
-
-
-class Transform:
-
-    def __init__(self, image_dim, image_format='coco'):
-        self.format = image_format
-        self.dim = image_dim
-        self.transform = A.Compose([
-            A.Resize(height=self.dim[0], width=self.dim[1], always_apply=True),
-            A.HorizontalFlip(p=0.5)
-        ], bbox_params=A.BboxParams(format=self.format, label_fields=['class_labels']))    
 
 # ____________________________________ Math tools ____________________________________ #
 
@@ -73,9 +64,11 @@ def match_boxes(gt_labels, def_boxes, threshold=0.5):
 
     Parameters
     ----------
-    gt_labels: Tensor of real bounding boxes of the image(s), with labels:
+    gt_labels: Tensor of real bounding boxes of the image(s), with labels, in the format:
+               [NUM_GT_BOXES * [x_min, y_min, x_max, y_max | label]]
                
-    def_boxes: Tensor of default boxes of an image
+    def_boxes: Tensor of default boxes of an image, in the format:
+               [NUM_DEF_BOXES * [x_min, y_min, x_max, y_max]]
     threshold: positive threshold
 
     Return
@@ -126,9 +119,9 @@ def encode_boxes(def_boxes, matched_boxes, variances=[0.1, 0.2]):
     Parameters
     ----------
     matched_boxes: Tensor of matched gt_boxes of all priors:
-                   NUM_PRIORS * [x_min, y_min, x_max, y_max]
-    def_boxes: Tensor of default boxes for each feature maps:
-               NUM_PRIORS * [x_min, y_min, x_max, y_max]
+                   [NUM_PRIORS * [x_min, y_min, x_max, y_max]]
+    def_boxes: Tensor of default boxes of an image, in the format:
+               [NUM_DEF_BOXES * [x_min, y_min, x_max, y_max]]
     variances: array of [center_variance, width_height_variance]
 
     Return 
@@ -150,16 +143,54 @@ def encode_boxes(def_boxes, matched_boxes, variances=[0.1, 0.2]):
     return tf.concat([c_offset, we_ratio], axis=-1)
 
 
-def jaccard_overlap(def_boxes, gt_boxes):
+def decode_boxes(def_boxes, pred_boxes, variances=[0.1, 0.2]):
     """
-    Calculate the IoU between 2 given set of bounding boxes
+    Decode the boxes obtained from the ssd prediction:
+        1 -> decode variances
+        2 -> get coordinates
 
     Parameters
     ----------
-    def_boxes: Tensor of coordinates of the prior boxes:
-               NUM_PRIORS * [x_min, y_min, x_max, y_max]
-    gt_boxes: Tensor of coordinates of the ground truth boxes:
-              NUM_OBJECTS * [x_min, y_min, x_max, y_max]
+    pred_boxes: Tensor of bboxes predicted by ssd:
+                   [BATCH_SIZE * NUM_PRIORS * [x_min, y_min, x_max, y_max]]
+    def_boxes: Tensor of default boxes of an image, in the format:
+               [NUM_DEF_BOXES * [x_min, y_min, x_max, y_max]]
+    variances: array of [center_variance, width_height_variance]
+
+    Return 
+    ------
+    bboxes: bounding boxes predicted by ssd in top-left format
+    """
+    # Decode variances
+    def_boxes = center_bbox(def_boxes)
+    c_offset = pred_boxes[..., :2] * variances[0] * def_boxes[:, 2:]
+    we_ratio = tf.math.exp(pred_boxes[..., 2:] * variances[1])
+
+    # Get center coordinates
+    c_coords = c_offset + def_boxes[:, :2]
+    we_coords = we_ratio * def_boxes[:, 2:]
+
+    # Corner bboxes
+    bboxes = corner_bbox(tf.concat([c_coords, we_coords], axis=-1))
+
+    return bboxes
+
+
+def jaccard_overlap(bbox1, bbox2, expand=True):
+    """
+    Calculate the IoU between 2 given set of bounding boxes.
+    The 'expand' parameter is useful for efficiency reasons when calculating IoU losses.
+
+    Parameters
+    ----------
+    bbox1: Tensor of default boxes or predicted boxes of an image, in the format:
+               [NUM_DEF(NUM_PRED) *  [x_min, y_min, x_max, y_max]]
+           If expand = False, the format should be:
+               [NUM_DEF(NUM_PRED) *  [[x_min, y_min, x_max, y_max]]]
+    bbox2: Tensor of coordinates of the ground truth boxes:
+               [NUM_OBJECTS * [x_min, y_min, x_max, y_max]]
+           If expand = False, the format should be:
+               [[NUM_OBJECTS * [x_min, y_min, x_max, y_max]]]
 
     Return
     ------
@@ -167,8 +198,9 @@ def jaccard_overlap(def_boxes, gt_boxes):
               Tensor -> shape (NUM_OBJECT, NUM_PRIORS) 
     """
     # Adapt dimensions
-    bbox1 = tf.expand_dims(def_boxes, 1)
-    bbox2 = tf.expand_dims(gt_boxes, 0)
+    if expand:
+        bbox1 = tf.expand_dims(bbox1, 1)
+        bbox2 = tf.expand_dims(bbox2, 0)
 
     intersection = get_intersection(bbox1, bbox2)
     union = get_union(bbox1, bbox2, intersection)
@@ -242,9 +274,10 @@ def corner_bbox(bbox):
     bottom_right = bbox[..., :2] + bbox[..., 2:]/2
     return tf.concat([top_left, bottom_right], axis=-1)
 
-def normalize_bbox(bbox, image_width, image_height, label=None, image_format="coco"):
+
+def normalize_bbox(bbox, image_width, image_height, label=None, image_format="min_max"):
     """
-    1. Center bbox
+    1. Corner bbox
         Convert a ground truth bbox to the format:
             [x_min, y_min, x_max, y_max]
     2. Normalize in the range (0, 1)
@@ -252,20 +285,27 @@ def normalize_bbox(bbox, image_width, image_height, label=None, image_format="co
     """
     if image_format == "coco":
         bbox = [bbox[0], bbox[1], (bbox[0]+bbox[2]), (bbox[1]+bbox[3])]
-    gtbox = [
-      bbox[0] / image_width,
-      bbox[1] / image_height,
-      bbox[2] / image_width,
-      bbox[3] / image_height
-    ]
     if label is not None:
-        gtbox += [label]
+        gtbox = tf.constant([
+            bbox[0] / image_width,
+            bbox[1] / image_height,
+            bbox[2] / image_width,
+            bbox[3] / image_height,
+            label
+        ], dtype=tf.float32)
+    else:
+        gtbox = tf.constant([
+            bbox[0] / image_width,
+            bbox[1] / image_height,
+            bbox[2] / image_width,
+            bbox[3] / image_height
+        ], tf.float32)
     return gtbox
 
 # ___________________________________ General tools ___________________________________ #
 
 
-def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="coco"):
+def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="min_max"):
     """
     Add bounding boxes to an image
 
@@ -275,31 +315,82 @@ def add_bboxes(image, bboxes, classes=None, scores=None, bboxes_format="coco"):
     bboxes: list of bounding boxes to draw on the image
     classes: labels within bounding boxes (no classes printed if None)
     scores: values of accuracy for each bounding box (no scores printed if None)
+    bboxes_format: can be 'coco', 'centered', 'min_max'
 
     Return
     ------
     image: the same image as before, but with the boxes inside
     """
+
+    # TODO: MAKE THE CODE MORE EFFICIENT
+
     num_boxes = len(bboxes)
+    if np.max(bboxes) <= 1.5:                                                   # TMP
+        bboxes = np.clip(bboxes, 0, 1)
+        bboxes[..., 0] = bboxes[..., 0] * image.shape[1]
+        bboxes[..., 1] = bboxes[..., 1] * image.shape[0]
+        bboxes[..., 2] = bboxes[..., 2] * image.shape[1]
+        bboxes[..., 3] = bboxes[..., 3] * image.shape[0]
+    bboxes = np.array(bboxes, dtype=np.int32)
+    if np.max(image) < 1.5:
+        image = ((image + 1.) * 127.).astype(np.int32)
     for i in range(num_boxes):
+        if np.max(image) > 1:
+            COLOR = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        else:
+            COLOR = (random.random(), random.random(), random.random())
         if bboxes_format == "coco":
             bboxes[i] = (int(bboxes[i][0]), int(bboxes[i][1]), 
                          int(bboxes[i][0]+bboxes[i][2]), int(bboxes[i][1]+bboxes[i][3]))
-        elif bboxes_format == "centered_coco":
+        elif bboxes_format == "centered":
             bboxes[i] = (int(bboxes[i][0]-bboxes[i][2]/2), int(bboxes[i][1]-bboxes[i][3]/2),
                          int(bboxes[i][0]+bboxes[i][2]/2), int(bboxes[i][1]+bboxes[i][3]/2))
         elif bboxes_format == "min_max":
-            pass
+            bboxes[i] = (int(bboxes[i][0]), int(bboxes[i][1]),
+                         int(bboxes[i][2]), int(bboxes[i][3]))
         else:
             raise ValueError("Wrong value for 'bboxes_format' arg")
         cv2.rectangle(img=image, pt1=(bboxes[i][0], bboxes[i][1]), pt2=(bboxes[i][2], bboxes[i][3]), 
-                      color=(255, 0, 0), thickness=1)
+                      color=COLOR, thickness=1)
         if classes is not None:
-            cv2.putText(img=image, text=classes[i], org=(bboxes[i][0], bboxes[i][1] - 10), 
-                        fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.3, 
-                        color=(0, 255, 255), thickness=2)
+            FONT = cv2.FONT_HERSHEY_SIMPLEX
+            FONTSCALE = 0.4
+            THICKNESS = 1
+            text = classes[i]
+            if scores is not None:
+                text += ' ' + str(scores[i])[:4]
+            textsize = cv2.getTextSize(text, FONT, FONTSCALE, THICKNESS)[0]
+            cv2.rectangle(img=image, pt1=(bboxes[i][0], bboxes[i][1]), pt2=(bboxes[i][0]+ceil(1.1*textsize[0]), bboxes[i][1]+ceil(1.2*textsize[1])), 
+                          color=COLOR, thickness=-1)
+            cv2.putText(img=image, text=text, org=(bboxes[i][0], bboxes[i][1]+textsize[1]), 
+                        fontFace=FONT, fontScale=FONTSCALE, 
+                        color=(255, 255, 255), thickness=THICKNESS)
     return image
 
+
+def test_bboxes(image, bboxes, bboxes_format='min_max', classnames=None, classnames_dict=None, scores=None):
+    """
+    Plot bounding boxes and relative classnames on the passed image
+
+    Parameters
+    ----------
+    image: the image to test
+    bboxes: the bboxes to plot
+    bboxes_format: 'coco', 'centered' or 'min_max' format
+    classnames: labels relative to bboxes
+    classnames_dict: dictionary with entries like {class_id -> class_name}
+    scores: tensor of predicted classes scores
+    """
+    if bboxes.shape[0] == 0:
+        raise ValueError("bboxes vector is void!")
+    if classnames_dict is not None and classnames is not None:
+        tmp_arr = np.array(classnames)
+        classnames = [classnames_dict[tmp_arr[i]] for i in range(len(tmp_arr))]
+    new_image = add_bboxes(np.copy(image), bboxes, classnames, scores, bboxes_format=bboxes_format)
+    plt.figure(figsize=(8, 8))
+    plt.imshow(new_image)
+    plt.show()
+    
 
 def lists_from_content(image_content):
     """
@@ -342,9 +433,10 @@ def load_annotations(directory):
     roots: list of all annotation roots
     """
     annotations_files = os.listdir(directory)
-    os.chdir(directory)
     annotations_files.sort()
-    roots = [ET.parse(ann_file).getroot() for ann_file in tqdm(annotations_files)]
+    print("\nLoading annotations into memory...")
+    roots = [ET.parse(os.path.join(directory, ann_file)).getroot() 
+             for ann_file in tqdm(annotations_files)]
     return roots
 
 # ____________________________________ COCO tools ____________________________________ #

@@ -1,164 +1,173 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-# ___________________________________________________ Libraries ___________________________________________________ #
+# __________________________________________ Libraries __________________________________________ #
 
 
-# Images 
-import cv2
-from cv2 import imread
-from skimage import io
-import matplotlib.pyplot as plt
-from image_detection import *
-from detection_tools import *
+# Dataset
+from pycocotools.coco import COCO
 
-# Learning 
+# Networks
 import tensorflow as tf
-from SSD import SSD
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers.schedules import PiecewiseConstantDecay
 
 # Math
 import numpy as np
 
-# Config
-from data_configuration import *
+# Generic
+from tensorboardX import SummaryWriter
+import time
+import os
 
-# ___________________________________________________ Constants ___________________________________________________ #
+# My files
+from ssd import SSD
+from loss import SSD_Loss
+from configuration import *
+from detection_tools import *
+from image_detection import *
+from train_utilities import *
+from data.dataset import COCO_Dataset, VOC_Dataset
 
-
-# Files parameters
-CHECKPOINT_DIR = './Checkpoints'
-CHECKPOINT_FILEPATH = CHECKPOINT_DIR + '/checkpoint'
-
-# Network parameters
-BASE_WEIGHTS = 'imagenet'
-BASE_NAME = "VGG16"
-DEFAULT_BOXES_NUM = [4, 6, 6, 6, 4, 4]
-ASPECT_RATIOS = [[1., 2., 1/2],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 3., 1/2, 1/3],
-                 [1., 2., 1/2],
-                 [1., 2., 1/2]]
-SCALES = [0.07, 0.15, 0.33, 0.51, 0.69, 0.87, 1.05]
-DEFAULT_BOXES_NUM = [4, 6, 6, 6, 4, 4]
-INPUT_SHAPE = (300, 300, 3)
-IMAGE_DIM = (300, 300)
-N_CHANNELS = 3
-
-# Learning parameters
-LEARNING_RATE = 0.001
-WEIGHT_DECAY = 5e-4
-MOMENTUM = 0.9
-
-# Train 
-CHECKPOINT_PERIOD = 1000
-ITERATIONS = 240000
-BATCH_SIZE = 32
-NUM_WORKERS = 8
-
-# ____________________________________________________ Functions ____________________________________________________ #
+# ____________________________________________ Main ____________________________________________ #
 
 
-def learn(ssd, optimizer, images, matched_boxes, labels):
-    with tf.GradientTape() as ssd_tape:
-        print(" - Prediction...")
-        feature_maps = ssd(images)
-        ssd_prediction = ssd.process_feature_maps(feature_maps)
-        print(" - Calculating Loss...")
-        multibox_loss, localization_loss, confidence_loss = \
-            ssd_loss(
-                gt_bboxes=matched_boxes,
-                gt_classes=labels,
-                prediction=ssd_prediction,
-                num_classes=ssd.num_classes
-            )
-    print(" - Optimization...")
-    ssd_gradients = ssd_tape.gradient(multibox_loss, ssd.trainable_variables)
-    ssd_optimizer.apply_gradients(zip(ssd_gradients, ssd.trainable_variables))
-    return multibox_loss, localization_loss, confidence_loss
+if __name__ == "__main__":
 
-# ______________________________________________________ Main ______________________________________________________ #
+    print("\n\n\n_______ Welcome to SSD Multibox training _______\n")
+    print("Initialization...")
 
-
-if __name__ == '__main__':
-    
-    # Dataset initialization
+    # ------------------------ Initialization ------------------------ #
+    ## 1. Dataset initialization
+    print("\t1. Dataset inizialization...")
     if DATASET_NAME == "COCO":
         train_coco = COCO(TRAIN_ANN_PATH)
         val_coco = COCO(VAL_ANN_PATH)
+        test_coco = COCO(TEST_ANN_PATH)
         dataset = COCO_Dataset(
             train_coco,
             val_coco,
-    )
+            test_coco
+        )
     elif DATASET_NAME == "VOC":
-        roots = load_annotations(TRAIN_ANN_PATH)
+        train_roots = load_annotations(TRAIN_ANN_PATH)
+        val_roots = load_annotations(VAL_ANN_PATH)
+        test_roots = load_annotations(TEST_ANN_PATH)
         dataset = VOC_Dataset(
-            roots
+            train_roots,
+            val_roots,
+            test_roots
         )
     else:
         raise ValueError("Wrong or unsupported dataset. Available 'COCO' or 'VOC'")
+    print("\n\tTraining on %s dataset" % (DATASET_NAME + DATASET_KEY))
     dataset.show_info()
+    _ = input("Press Enter to continue...")
 
+    ## 2. Dataloader initialization
+    print("\t2. Dataloader initialization...")
     dataloader = Dataloader(
         dataset, 
         BATCH_SIZE
     )
     train_generator = dataloader.generate_batch("train")
 
-    # Network initialization
-    ssd = SSD(num_classes=len(dataset.labels)+1, input_shape=INPUT_SHAPE)
-    ssd_optimizer = SGDW(
-        learning_rate = LEARNING_RATE,         #TODO: add learning rate schedule
-        weight_decay = WEIGHT_DECAY,
-        momentum = MOMENTUM
-    )
+    ## 3. Network initialization
+    print("\t3. Network initialization...")
+    ssd = SSD(num_classes=len(dataset.label_ids)+1, input_shape=INPUT_SHAPE)
     checkpoint = tf.train.Checkpoint(ssd)
-    ssd.summary()  
+    ssd.summary()
+    _ = input("Press Enter to continue...")   
 
-    # Generating default boxes
+    ## 4. Generate default boxes
+    print("\t4. Default boxes generation...")
     fm_shapes = ssd.output_shape
     aspect_ratios = ASPECT_RATIOS
     scales = SCALES
-    default_boxes = Image.generate_default_boxes(fm_shapes, aspect_ratios, scales)
-    default_boxes = tf.stack(default_boxes, axis=0)
+    default_boxes = Image.generate_default_boxes(fm_shapes, aspect_ratios, scales)     
 
-    # Train
-    for iteration in range(ITERATIONS):
+    ## 5. Learning initializations
+    print("\t5. Learning initialization...")
+    learning_rate = PiecewiseConstantDecay(
+        boundaries = BOUNDARIES,
+        values = LR_VALUES
+    )
+    ssd_optimizer = SGD(
+        learning_rate = learning_rate,
+        momentum = MOMENTUM
+    )
+    ssd_loss = SSD_Loss(
+        default_boxes = default_boxes,
+        num_classes = ssd.num_classes, 
+        regression_type = REGRESSION_TYPE, 
+        hard_negative_ratio = 3, 
+        alpha = ALPHA
+    )           
+
+    ## 6. Training initializations
+    print("\t6. Final training initializations...")
+    last_iter = 0
+    iterations = []
+    mb_losses, loc_losses, conf_losses = [], [], []
+    if TENSORBOARD_LOGS:
+        writer = SummaryWriter(comment = "SSD | __" + DATASET_NAME + DATASET_KEY + "__")
+    if LOAD_MODEL:
+        print("Loading latest train data...")
+        ssd, iterations, mb_losses, loc_losses, conf_losses = \
+            load_train_data(ssd, CHECKPOINT_DIR)
+        last_iter = iterations[-1]
+        if TENSORBOARD_LOGS:
+            for i in range(last_iter):
+                writer.add_scalar("Multibox loss", mb_losses[i], i)
+                writer.add_scalar("Confidence loss", conf_losses[i], i)
+                writer.add_scalar("Localization loss", loc_losses[i], i)
+    # ---------------------------------------------------------------- #
+    
+    print("Initialization completed!")
+    print("Start Training...")
+
+    # -------------------------- Train loop -------------------------- #
+    for iteration in range(last_iter+1, ITERATIONS):
 
         # Load data
-        print("\n________Train iteration %d________" % iteration)
-        print("1.1 Data loading")
         glob_start = time.time()
-        train_imgs, train_labels, train_ids = next(train_generator)
+        try:
+            train_imgs, train_labels, train_ids = next(train_generator)
+        except StopIteration:
+            train_generator = dataloader.generate_batch("train")
+            train_imgs, train_labels, train_ids = next(train_generator)
         batch_size = len(train_imgs)
 
-        # Adapt input to base model
-        print("1.2 Additional preprocessing")
-        print(" - Adapt images for %s model..." % ssd.base_architecture)
-        input_imgs = [preprocess_input(img) for img in train_imgs]
-
         # Match bounding boxes
-        print(" - Matching bboxes...")
         matched_boxes, def_labels = [], []
         for b in range(batch_size):
-            tl = tf.cast(tf.stack(train_labels[b], axis=0), dtype=tf.float32)
-            boxes, labels = match_boxes(tl, default_boxes)
+            boxes, labels = match_boxes(train_labels[b], default_boxes)
             matched_boxes.append(boxes)
             def_labels.append(labels)
 
         # Predict and learn
-        print("2. Learning step")
-        input_imgs = np.stack(input_imgs, axis=0)
+        input_imgs = np.stack(train_imgs, axis=0)
         matched_boxes = tf.stack(matched_boxes, axis=0)
         def_labels = tf.stack(def_labels, axis=0)
         multibox_loss, localization_loss, confidence_loss = \
-            learn(ssd, ssd_optimizer, input_imgs, matched_boxes, def_labels)
-        print(" Localization loss = ", localization_loss)
-        print(" Confidence loss = ", confidence_loss)
-        print(" Multibox loss = ", multibox_loss)
+            learn(ssd, ssd_optimizer, ssd_loss, input_imgs, matched_boxes, def_labels)
+        print("[%d] (%f s)   -   Multibox loss = |%f|, Localization loss = |%f|, Confidence_loss = |%f|" % 
+            (iteration, time.time() - glob_start, multibox_loss, localization_loss, confidence_loss))
+        
+        # Plot train process
+        iterations.append(iteration)
+        mb_losses.append(multibox_loss)
+        loc_losses.append(localization_loss)
+        conf_losses.append(confidence_loss)
+        if iteration % PLOT_PERIOD == 0 and iteration > 0:
+            plot_train_data(iterations, mb_losses, loc_losses, conf_losses)
+
+        # Update Tensorboard Writer
+        if TENSORBOARD_LOGS:
+            writer.add_scalar("Multibox loss", multibox_loss.numpy(), iteration)
+            writer.add_scalar("Confidence loss", confidence_loss.numpy(), iteration)
+            writer.add_scalar("Localization loss", localization_loss.numpy(), iteration)
 
         # Save checkpoint
         if iteration % CHECKPOINT_PERIOD == 0 and iteration > 0:
-            print(" - Saving Weights...")
-            save_path = checkpoint.save(CHECKPOINT_FILEPATH)
-        
-        print("___Done in %f s!___" % (time.time() - glob_start))
+            print(" - Saving Train data...")
+            save_train_data(checkpoint, CHECKPOINT_FILEPATH, iterations, mb_losses, loc_losses, conf_losses)

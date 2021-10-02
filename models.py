@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-import warnings
+# Stock libraries
 import numpy as np
 import tensorflow as tf
-from base_models.vgg16_new import VGG16
 from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import MaxPool2D, Conv2D, Layer, Input
+from tensorflow.keras.layers import MaxPool2D, Conv2D
 
-
-BASE_WEIGHTS = 'imagenet'
+# My libraries
+from base_models.vgg16_new import VGG16
 
 
 # __________________________________ Support Classes __________________________________ #
@@ -59,36 +58,6 @@ class Network_Indexer:
             raise TypeError("'key' must be an int or str")
         return index
 
-    def indexable_call(self, layers, inputs, start_layer=None, last_layer=None):
-        """
-        Indexable call for neural networks
-
-        Parameters
-        ----------
-            inputs: tensor (np_array) or list of tensors (np_arrays)
-            layers: layers of the model
-            start_layer: layer from which to start forwarding the input
-            last_layer: layer where to stop the forwarding
-
-        Returns
-        -------
-            result of network forwarding operation
-        """
-        outputs = None
-        start, last = 0, len(layers)-1
-        if start_layer is not None:
-            start = self.get_layer_index(layers, start_layer)
-        if last_layer is not None:
-            last = self.get_layer_index(layers, last_layer)
-        for l in range(last+1):
-            if l < start:
-                continue
-            outputs = layers[l](inputs)
-            if l == last:
-                break
-            inputs = outputs
-        return outputs
-
 
 class Powered_Sequential(Sequential):
     """
@@ -108,10 +77,29 @@ class Powered_Sequential(Sequential):
     def __getitem__(self, key):
         return self.indexer.get_item(self.layers, key)
 
-    def call(self, inputs, training=False, start_layer=None, last_layer=None):
-        return self.indexer.indexable_call(
-            self.layers, inputs, start_layer, last_layer)
+    def indexable_call(self, inputs, training=False, start=None, end=None):
+        """
+        Normal sequential call, but with the possibility to choose first and last layer
+        """
+        outputs = None
+        if start is None:
+            start = 0
+        if end is None:
+            end = len(self.layers)
+        if start is not None or end is not None:
+            for l, layer in enumerate(self.layers):
+                if l == start or layer.name == start:
+                    start = l
+                if l+1 == end or layer.name == end:
+                    end = l+1
+        for l in range(start, end):
+            outputs = self.layers[l](inputs)
+            inputs = outputs
 
+        return outputs
+
+    def call(self, inputs, training=False, start=None, end=None):
+      pass
 
 class Powered_Model(Model):
     """
@@ -132,9 +120,29 @@ class Powered_Model(Model):
     def __getitem__(self, key):
         return self.indexer.get_item(self.layers, key)
 
-    def call(self, inputs, training=False, start_layer=None, last_layer=None):
-        return self.indexer.indexable_call(
-            self.layers, inputs, start_layer, last_layer)
+    def indexable_call(self, inputs, training=False, start=None, end=None):
+        """
+        Normal model call, but with the possibility to choose first and last layer
+        """
+        outputs = None
+        if start is None:
+            start = 0
+        if end is None:
+            end = len(self.layers)
+        if start is not None or end is not None:
+            for l, layer in enumerate(self.layers):
+                if l == start or layer.name == start:
+                    start = l
+                if l+1 == end or layer.name == end:
+                    end = l+1
+        for l in range(start, end):
+            outputs = self.layers[l](inputs)
+            inputs = outputs
+
+        return outputs
+
+    def call(self, inputs, training=False, start=None, end=None):
+      pass
 
 
 # __________________________________ Network Classes __________________________________ #
@@ -145,7 +153,15 @@ class BaseNet(Powered_Sequential):
     Base Architecture Model, composed by a pre-trained net and few added head layers
     """
     def __init__(self, architecture, input_shape, name="BaseNet"):
+        """
+        Base Network class constructor
 
+        Parameters
+        ----------
+        architecture: the name of the architecture for the base network
+        input_shape: the shape of the images in input to the complete SSD network
+        name: the name of this sub-network
+        """
         if architecture in ["VGG16", "VGG-16", "VGG_16"]:
 
             # 1.1. Copy VGG16 pre-trained network
@@ -156,26 +172,24 @@ class BaseNet(Powered_Sequential):
             dummy_arch = VGG16(include_top=True, weights='imagenet') 
             head_layers = dummy_arch.layers[-3:]
 
+            # 1.3 Copy old fc6, fc7 weights into new head layers
+            fc6_weights, fc6_biases = head_layers[0].get_weights()
+            fc7_weights, fc7_biases = head_layers[1].get_weights()
+
             # 2. Add new head
             base_layers.append(MaxPool2D(pool_size=3, strides=1, padding="same", name=arch.layers[-1].name))
-            base_layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6"))
-            base_layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7"))
+            base_layers.append(Conv2D(1024, kernel_size=3, padding="same", dilation_rate=6, activation='relu', name="head_conv6",
+                                      weights=[np.random.choice(np.reshape(fc6_weights, (-1,)), (3, 3, 512, 1024)),
+                                               np.random.choice(fc6_biases, (1024,))]))
+            base_layers.append(Conv2D(1024, kernel_size=1, padding="same", activation='relu', name="head_conv7",
+                                      weights=[np.random.choice(np.reshape(fc7_weights, (-1,)), (1, 1, 1024, 1024)),
+                                               np.random.choice(fc7_biases, (1024,))]))
 
             # 3. Instantiate model
             super(BaseNet, self).__init__(
                 layers=base_layers,
                 name=name
             )
-
-            # 4. Copy old fc6, fc7 weights into new head layers
-            fc6_weights, fc6_biases = head_layers[0].get_weights()
-            fc7_weights, fc7_biases = head_layers[1].get_weights()
-            self.layers[-2].set_weights([
-              np.random.choice(np.reshape(fc6_weights, (-1,)), (3, 3, 512, 1024)),
-              np.random.choice(fc6_biases, (1024,))])
-            self.layers[-1].set_weights([
-              np.random.choice(np.reshape(fc7_weights, (-1,)), (1, 1, 1024, 1024)),
-              np.random.choice(fc7_biases, (1024,))])
 
         else:
             raise TypeError("Wrong name for the base architecture")
@@ -186,6 +200,14 @@ class ExtraNet(Powered_Sequential):
     Extra Layers Model
     """
     def __init__(self, layers, name="ExtraNet"):
+        """
+        Extra Layers model constructor
+
+        Parameters
+        ----------
+        layers: extra layers of the SSD network
+        name: name of this sub-network
+        """
         super(ExtraNet, self).__init__(
             layers=layers, 
             name=name
@@ -197,6 +219,14 @@ class DetectorNet(Powered_Model):
     Detector Model, composed by a list of input and corresponding predictors
     """
     def __init__(self, input_layers, predictors, name="DetectorNet"):
+        """
+        Detector model constructor
+
+        Parameters
+        ----------
+        input_layers: list of input layers which are the input to the various detectors
+        predictors: list of detector layers
+        """
         outputs = [predictors[i](input_layers[i]) for i in range(len(predictors))]
         super(DetectorNet, self).__init__(
             inputs=input_layers, 
@@ -211,6 +241,9 @@ class DetectorNet(Powered_Model):
 
     @property
     def output_shape(self):
+        """
+        Output shapes of predictors
+        """
         return [pred.output_shape for pred in self.predictors]
 
     def call(self, inputs, training=False):
@@ -218,9 +251,9 @@ class DetectorNet(Powered_Model):
         for i in range(len(inputs)):
             in_predict = self.layers[i](inputs[i])
             out_layer = i + len(self.input_layers)
-            outputs.append(super(DetectorNet, self).call(
+            outputs.append(super(DetectorNet, self).indexable_call(
                 in_predict,
-                start_layer=out_layer,
-                last_layer=out_layer
+                start=out_layer,
+                end=out_layer+1
             ))
         return outputs
