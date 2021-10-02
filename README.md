@@ -19,6 +19,13 @@ Before the training, it's possible to build automatically the dataset by exploit
 * VOC 07+12 = VOC2012 trainval + VOC2007 trainval -> test on VOC2007
 * VOC 07++12 = VOC2012 trainval + VOC2007 trainval + VOC2007 test -> test on VOC2012
 
+These are the training graphs after 10k iterations:
+
+| | |
+|---|---|
+| ![img01](graphs/losses_10k.png) | ![img02](graphs/loc_loss_10k.png) |
+
+
 Another interesting training choice can be made on the loss function, indeed the paper https://paperswithcode.com/paper/distance-iou-loss-faster-and-better-learning introduces new kinds of losses based on the IoU, in particular the Distance-IoU:
 
 * Zheng, Zhaohui & Wang, Ping & Liu, Wei & Li, Jinze & Ye, Rongguang & Ren, Dongwei. (2020). *Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression.* Proceedings of the AAAI Conference on Artificial Intelligence. 34. 12993-13000. 10.1609/aaai.v34i07.6999. 
