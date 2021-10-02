@@ -58,6 +58,30 @@ class IoU_Loss:
         # 3. Compute RDIoU
         return p_square / c_square
     
+    def av(self, iou, gt_bboxes, pred_bboxes):
+        """
+        Compute the penalty term for the CIoU loss, based on aspect ratio
+
+        Parameters 
+        ----------
+        iou: IoU value between gt_bboxes and pred_bboxes
+        gt_bboxes: positive matched boxes, in the format:
+            [NUM_POSITIVES * [xmin, y_min, x_max, y_max]]
+        pred_bboxes: positive predicted boxes, in the format:
+            [NUM_POSITIVES * [xmin, y_min, x_max, y_max]]
+        """
+        # 1. Compute v
+        w_gt = gt_bboxes[..., 2] - gt_bboxes[0]
+        h_gt = gt_bboxes[..., 3] - gt_bboxes[1]
+        w_pred = pred_bboxes[..., 2] - pred_bboxes[..., 0]
+        h_pred = pred_bboxes[..., 3] - pred_bboxes[..., 1]
+        v = (4/(math.pi**2)) * ((tf.math.atan(w_gt/h_gt) - tf.math.atan(w_pred/h_pred)) ** 2)
+
+        # 2. Compute a
+        a = v / (tf.ones_like(iou) - iou + v)
+
+        return a*v
+    
     def __call__(self, gt_bboxes, pred_bboxes):
         """
         Apply the desired IoU regression loss with a sum reduction
@@ -76,8 +100,8 @@ class IoU_Loss:
         if self.loss_type == 'DIoU':
             loss = diou_loss
         elif self.loss_type == 'CIoU':
-            ciou_penalty = None    # TODO: compute ciou penalty
-            loss = diou_loss + ciou_penalty
+            av = self.av(iou, gt_bboxes, pred_bboxes)
+            loss = diou_loss + av
         else:
             warnings.warn("Wrong loss type. Available 'DIoU' or 'CIoU'")
         return tf.math.reduce_sum(loss)
