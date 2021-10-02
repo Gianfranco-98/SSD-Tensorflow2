@@ -1,51 +1,57 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-# Dataset
-from pycocotools.coco import COCO
-import xml.etree.ElementTree as ET
 
-# Generic
-from abc import ABC, abstractmethod
+# Stock libraries
 from tqdm import tqdm
-import numpy as np
-import time
-import os
+import tensorflow as tf
+import multiprocessing as mp
+from abc import ABC, abstractmethod
 
-# My files
+# My libraries
+from configuration import *
 from detection_tools import *
 
 
-# Dataset configuration ------------------------------------------------------ #
-DATASET_NAME = "VOC"
-DATASET_YEAR = "2012"
-DATA_PATH = '/content/data/' + DATASET_NAME + DATASET_YEAR
-TRAIN_ANN_PATH = None
-VAL_ANN_PATH = None
-ANN_PATH = None
-
-if DATASET_NAME == "COCO":
-    TRAIN_ANN_PATH = DATA_PATH + '/annotations/instances_train' + DATASET_YEAR + '.json'
-    VAL_ANN_PATH = DATA_PATH + '/annotations/instances_val' + DATASET_YEAR + '.json'
-    SCALES = [0.07, 0.15, 0.33, 0.51, 0.69, 0.87, 1.05]
-elif DATASET_NAME == "VOC":
-    TRAIN_ANN_PATH = DATA_PATH + '/Annotations'
-    SCALES = [0.10, 0.20, 0.37, 0.54, 0.71, 0.88, 1.05]
-# ---------------------------------------------------------------------------- #
-
-
 class Dataset(ABC):
-
+    """
+    Base class for any dataset
+    """
     def __init__(
         self,
         name,
+        train_dir=TRAINVAL_PATH,
+        val_dir=TRAINVAL_PATH,
+        test_dir=TEST_PATH,
+        imgs_folder=IMGS_FOLDER,
+        anns_folder=ANNS_FOLDER,
         image_dim=(300, 300),
         n_channels=3,
-        image_source="url"
+        image_source="disk"
     ):
+        """
+        Dataset base class constructor
+
+        Parameters
+        ----------
+        name: name of the dataset
+        train_dir: directory of the train set
+        val_dir: directory of the validation set
+        test_dir: directory of the test set
+        imgs_folder: name of the folder which contains the images
+        anns_folder: name of the folder which contains the annotations
+        image_dim: desired dimension of the images
+        n_channels: desired channels of the images
+        image_source: where the images come from 
+        """
         if name not in ['COCO', 'VOC']:
             raise ValueError("Wrong dataset name. Available 'COCO' or 'VOC'")
         self.name = name
+        self.train_dir = train_dir
+        self.val_dir = val_dir
+        self.test_dir = test_dir
         self.image_dim = image_dim
+        self.imgs_folder = imgs_folder
+        self.anns_folder = anns_folder
         self.n_channels = n_channels
         self.image_source = image_source
         self.train_ids, self.val_ids, self.test_ids = None, None, None
@@ -66,6 +72,7 @@ class Dataset(ABC):
         print("_____________________________ INFO _____________________________\n")
         print("Train set = %i images [%s]" % (len(self.train_ids), self.image_source))
         print("Eval set = %i images [%s]" % (len(self.val_ids), self.image_source))
+        print("Test set = %i images [%s]" % (len(self.test_ids), self.image_source))
         print("%d Labels:\n%s" % (len(self.classnames_dict), self.classnames_dict))
         print("________________________________________________________________\n") 
     
@@ -120,25 +127,42 @@ class Dataset(ABC):
 
 
 class COCO_Dataset(Dataset):
-
+    """
+    COCO Dataset class
+    """
     def __init__(
         self,
         train_coco,
-        val_coco
+        val_coco,
+        test_coco,
+        image_source="url"
     ):
-        super(COCO_Dataset, self).__init__(name="COCO", image_source="url")
+        """
+        COCO Dataset class constructor
+
+        Parameters
+        ----------
+        train_coco: the coco object containing the train information
+        val_coco: the coco object containing the validation information
+        test_coco: the coco object containing the test information
+        image_source: where the images come from
+        """  
+        super(COCO_Dataset, self).__init__(name="COCO", image_source=image_source)
         self.train_obj = train_coco
         self.val_obj = val_coco
+        self.test_obj = test_coco
 
         # get basic info
         self.train_ids, self.train_urls, self.train_filenames = self.global_info(train_coco) 
         self.val_ids, self.val_urls, self.val_filenames = self.global_info(val_coco)
+        self.test_ids, self.test_urls, self.test_filenames = self.global_info(test_coco)
         self.label_ids, self.label_names = self.label_info(train_coco)
         self.create_dicts()
 
         # get detection data
         self.train_bboxes, self.train_labels = self.get_detection_data(train_coco)
         self.val_bboxes, self.val_labels = self.get_detection_data(val_coco)
+        self.test_bboxes, self.test_labels = self.get_detection_data(test_coco)
 
     def global_info(self, coco):
         img_ids = coco.getImgIds()
@@ -163,24 +187,41 @@ class COCO_Dataset(Dataset):
 
 
 class VOC_Dataset(Dataset):
-
+    """
+    VOC Dataset class
+    """
     def __init__(
         self,
         train_roots,
-        val_roots=None
+        val_roots=None,
+        test_roots=None,
+        image_source="disk"
     ):
-        super(VOC_Dataset, self).__init__(name="VOC", image_source="disk")
+        """
+        VOC dataset class constructor
+
+        Parameters
+        ----------
+        train_roots: the xml root elements containing the train information
+        val_roots: the xml root elements containing the validation information
+        test_roots: the xml root elements containing the test information
+        image_source: where the images come from
+        """
+        super(VOC_Dataset, self).__init__(name="VOC", image_source=image_source)
+        self.val_dir = self.test_dir
         self.train_obj = train_roots
 
         # get basic info
         self.train_ids, self.train_urls, self.train_filenames = self.global_info(train_roots) 
         self.val_ids, self.val_urls, self.val_filenames = self.global_info(val_roots)
+        self.test_ids, self.test_urls, self.test_filenames = self.global_info(test_roots)
         self.label_ids, self.label_names = self.label_info(train_roots)
         self.create_dicts()
 
         # get detection data
         self.train_bboxes, self.train_labels = self.get_detection_data(train_roots)
         self.val_bboxes, self.val_labels = self.get_detection_data(val_roots)
+        self.test_bboxes, self.test_labels = self.get_detection_data(test_roots)
 
     def global_info(self, roots):
         ids, urls, filenames = [], [], []
@@ -215,6 +256,7 @@ class VOC_Dataset(Dataset):
                     label_obj = obj.find("name")
                     labels[i].append(names_dict[label_obj.text.lower().strip()])
                     bboxes[i].append([int(bbox_obj.find(coord).text) - 1 for coord in format])
+                bboxes[i] = tf.cast(tf.stack(bboxes[i], 0), dtype=tf.float32)
       else:
           bboxes, labels = [], []
       return bboxes, labels
