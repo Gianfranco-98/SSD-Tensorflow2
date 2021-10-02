@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 
+readonly DATASET_KEY="07+12"
+
 mkdir tmp
 cd tmp
 
-# Downloading trainval2012, trainval2007, test2007
+# Downloading sub-datasets
 wget pjreddie.com/media/files/VOCtrainval_11-May-2012.tar
 wget pjreddie.com/media/files/VOCtrainval_06-Nov-2007.tar
 wget pjreddie.com/media/files/VOCtest_06-Nov-2007.tar
+if [ $DATASET_KEY = "07++12" ]
+then
+	wget pjreddie.com/media/files/VOC2012test.tar
+fi
 
 # Extract them in tmp folder 
 echo "Extracting trainval2012..."
@@ -19,13 +25,26 @@ mv -v VOCdevkit/VOC2007 ./
 rm -r VOCdevkit
 echo "Extracting test2007..."
 tar -xf VOCtest_06-Nov-2007.tar
-mv -v VOCdevkit/VOC2007 ./VOC2007_Test
+if [ $DATASET_KEY = "07+12" ]
+then
+	mv -v VOCdevkit/VOC2007 ./VOC2007_Test
+elif [ $DATASET_KEY = "07++12" ]
+then
+	!echo "Extracting test2012..."
+        !tar -xf VOC2012test.tar
+        !mv -v VOCdevkit/VOC2012 /content/data/tmp/Test
+	mv -v VOCdevkit/VOC2007 ./
+fi
 rm -r VOCdevkit
 
 # First clean
 rm VOCtrainval_11-May-2012.tar
 rm VOCtrainval_06-Nov-2007.tar
 rm VOCtest_06-Nov-2007.tar
+if [ $DATASET_KEY = "07++12" ]
+then
+	rm VOC2012test.rar
+fi
 cd ..
 
 # Python script
