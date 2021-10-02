@@ -23,7 +23,7 @@ Another interesting training choice can be made on the loss function, indeed the
 
 * Zheng, Zhaohui & Wang, Ping & Liu, Wei & Li, Jinze & Ye, Rongguang & Ren, Dongwei. (2020). *Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression.* Proceedings of the AAAI Conference on Artificial Intelligence. 34. 12993-13000. 10.1609/aaai.v34i07.6999. 
 
-A Colab Notebook is also made available ([`SSD_Notebook.ipynb`](SSD_Notebook.ipynb)), allowing the people to interact with this implementation or to train the SSD on Colab GPU: normally it isn't possible because of the colab limitations, but thanks to some train utilities in this work, one can exploit Google Drive to save automatically ALL the training data (including iterations and loss arrays) in order to continue the training after interruption and plot trends) or load it when starting from a previous training session.
+A Colab Notebook is also made available ([`SSD_Notebook.ipynb`](notebooks/SSD_Notebook.ipynb)), allowing the people to interact with this implementation or to train the SSD on Colab GPU: normally it isn't possible because of the colab limitations, but thanks to some train utilities in this work, one can exploit Google Drive to save automatically ALL the training data (including iterations and loss arrays) in order to continue the training after interruption and plot trends) or load it when starting from a previous training session.
 
 ### Testing
 
