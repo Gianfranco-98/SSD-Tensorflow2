@@ -25,6 +25,20 @@ These are the training graphs after 10k iterations:
 |---|---|
 | ![img01](graphs/losses_10k.png) | ![img02](graphs/loc_loss_10k.png) |
 
+The mAP obtained with this training time (10k iterations) is quite low, but anyway it's a good starting point for reasoning about this dataset limitation. This table shows that **mAP** = **0.422**
+
+|             |    AP    |              |    AP    |
+|-------------|----------| -------------|----------|
+|aeroplane    |  0.4832  | diningtable  |  0.4209  |
+|bicycle      |  0.5093  | dog          |  0.6368  |
+|bird         |  0.3785  | horse        |  0.6001  |
+|boat         |  0.2077  | motorbike    |  0.5752  |
+|bottle       |  0.0778  | person       |  0.4815  |
+|bus          |  0.5374  | pottedplant  |  0.1206  |
+|car          |  0.5316  | sheep        |  0.2753  |
+|cat          |  0.7129  | sofa         |  0.4453  |
+|chair        |  0.1333  | train        |  0.6054  |
+|cow          |  0.1931  | tvmonitor    |  0.5035  |
 
 Another interesting training choice can be made on the loss function, indeed the paper https://paperswithcode.com/paper/distance-iou-loss-faster-and-better-learning introduces new kinds of losses based on the IoU, in particular the Distance-IoU:
 
