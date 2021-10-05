@@ -1,4 +1,4 @@
-# SSD_Tensorflow2
+# SSD-Tensorflow2
 Object Detection in tf2 with SSD
 
 ### Introduction
