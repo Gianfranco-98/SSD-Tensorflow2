@@ -60,7 +60,7 @@ At this moment the SSD is trained only for 10k iterations on VOC 07+12. The trai
 
 | | |
 |---|---|
-| ![img01](./examples/1.png) | ![img02](./examples/2.png) |
+| ![img01](./examples/1.png) | ![img02](./examples/3.png) |
 | ![img03](./examples/4.png) | ![img04](./examples/6.png) |
 
 ### TODO
