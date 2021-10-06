@@ -67,10 +67,9 @@ At this moment the SSD is trained only for 10k iterations on VOC 07+12. The trai
 
 1. Complete the train
 2. Add COCO script
-3. Add evaluation metrics
 4. Add the SSD512 structure
-5. Try different base networks
-6. Test on videos
+4. Try different base networks
+5. Test on videos
 
   
   
