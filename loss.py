@@ -71,8 +71,8 @@ class IoU_Loss:
             [NUM_POSITIVES * [xmin, y_min, x_max, y_max]]
         """
         # 1. Compute v
-        w_gt = gt_bboxes[..., 2] - gt_bboxes[0]
-        h_gt = gt_bboxes[..., 3] - gt_bboxes[1]
+        w_gt = gt_bboxes[..., 2] - gt_bboxes[..., 0]
+        h_gt = gt_bboxes[..., 3] - gt_bboxes[..., 1]
         w_pred = pred_bboxes[..., 2] - pred_bboxes[..., 0]
         h_pred = pred_bboxes[..., 3] - pred_bboxes[..., 1]
         v = (4/(math.pi**2)) * ((tf.math.atan(w_gt/h_gt) - tf.math.atan(w_pred/h_pred)) ** 2)
