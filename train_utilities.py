@@ -44,7 +44,7 @@ def learn(ssd, ssd_optimizer, ssd_loss, images, matched_boxes, labels):
     return multibox_loss, localization_loss, confidence_loss
 
 
-def save_train_data(checkpoint_handler, checkpoint_filepath, iterations, mb_losses, loc_losses, conf_losses):
+def save_train_data(checkpoint_handler, checkpoint_filepath, checkpoint_dir, iterations, mb_losses, loc_losses, conf_losses):
     """
     Save network weights and training informations into np arrays
 
@@ -72,10 +72,10 @@ def save_train_data(checkpoint_handler, checkpoint_filepath, iterations, mb_loss
     np.save('./conf_losses', conf)
 
     # Move files to a drive folder
-    copyfile('./iterations.npy', CHECKPOINT_DIR + '/train_data/iterations.npy')
-    copyfile('./mb_losses.npy', CHECKPOINT_DIR + '/train_data/mb_losses.npy')
-    copyfile('./loc_losses.npy', CHECKPOINT_DIR + '/train_data/loc_losses.npy')
-    copyfile('./conf_losses.npy', CHECKPOINT_DIR + '/train_data/conf_losses.npy')
+    copyfile('./iterations.npy', checkpoint_dir + '/train_data/iterations.npy')
+    copyfile('./mb_losses.npy', checkpoint_dir + '/train_data/mb_losses.npy')
+    copyfile('./loc_losses.npy', checkpoint_dir + '/train_data/loc_losses.npy')
+    copyfile('./conf_losses.npy', checkpoint_dir + '/train_data/conf_losses.npy')
 
 
 def load_train_data(net, checkpoint_dir):
@@ -99,10 +99,10 @@ def load_train_data(net, checkpoint_dir):
     net.load_weights(latest)
 
     # Copy iterations and losses data into actual scope
-    copyfile(CHECKPOINT_DIR + '/train_data/iterations.npy', './iterations.npy')
-    copyfile(CHECKPOINT_DIR + '/train_data/mb_losses.npy', './mb_losses.npy')
-    copyfile(CHECKPOINT_DIR + '/train_data/loc_losses.npy', './loc_losses.npy')
-    copyfile(CHECKPOINT_DIR + '/train_data/conf_losses.npy', './conf_losses.npy')
+    copyfile(checkpoint_dir + '/train_data/iterations.npy', './iterations.npy')
+    copyfile(checkpoint_dir + '/train_data/mb_losses.npy', './mb_losses.npy')
+    copyfile(checkpoint_dir + '/train_data/loc_losses.npy', './loc_losses.npy')
+    copyfile(checkpoint_dir + '/train_data/conf_losses.npy', './conf_losses.npy')
 
     # Load iterations and losses data
     iterations = np.load('./iterations.npy').tolist()
