@@ -170,4 +170,4 @@ if __name__ == "__main__":
         # Save checkpoint
         if iteration % CHECKPOINT_PERIOD == 0 and iteration > 0:
             print(" - Saving Train data...")
-            save_train_data(checkpoint, CHECKPOINT_FILEPATH, iterations, mb_losses, loc_losses, conf_losses)
+            save_train_data(checkpoint, CHECKPOINT_FILEPATH, CHECKPOINT_DIR, iterations, mb_losses, loc_losses, conf_losses)
